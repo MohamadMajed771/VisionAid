@@ -1,0 +1,27 @@
+# API keys and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node.js
+node_modules/
+dist/
+
+# AI model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Datasets and checkpoints
+datasets/
+checkpoints/
+
+# IDE
+.vscode/
+.idea/
