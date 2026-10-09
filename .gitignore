@@ -6,6 +6,7 @@
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
 
 # Node.js
@@ -15,6 +16,7 @@ dist/
 # AI model weights
 *.pt
 *.pth
+*.safetensors
 *.onnx
 *.engine
 
@@ -22,33 +24,20 @@ dist/
 datasets/
 checkpoints/
 
-# IDE
-.vscode/
-.idea/
-
-# AI model weights
-*.pt
-*.pth
-*.safetensors
-*.onnx
-*.engine
-
 # Downloaded third-party source code
 ai-models/depth-pro-source/
-
-# Generated test images
-ai-models/depth_result.png
-ai-models/result.jpg
-
-# Python cache and package metadata
-__pycache__/
-*.pyc
-*.egg-info/
 
 # Hugging Face download cache
 **/.cache/huggingface/
 
-# Private environment files
-.env
-.env.*
-!.env.example
+# Generated test images
+ai-models/depth_result.png
+ai-models/result.jpg
+ai-models/combined_result.jpg
+
+# Local backup files
+backend/vision_analyzer_backup.py
+
+# IDE
+.vscode/
+.idea/

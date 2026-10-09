@@ -1,14 +1,15 @@
 
 import gc
 import inspect
+import threading
 import time
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 
+import depth_pro
 import numpy as np
 import torch
-import depth_pro
 
 from PIL import Image
 from transformers import (
@@ -29,58 +30,54 @@ DEPTH_CHECKPOINT = (
     BASE_DIR / "ai-models" / "depth-pro" / "depth_pro.pt"
 )
 
-DEVICE = torch.device(
+GPU_DEVICE = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
-# Experimental: use FP16 autocast for Depth Pro on CUDA.
-# Change to False to return to normal FP32 inference.
+# Keep the detector on CPU initially to avoid
+# competing with Depth Pro for GPU memory.
+DETECTOR_DEVICE = torch.device("cpu")
+
 USE_DEPTH_FP16 = True
+
+# Shared model resources
+_depth_model = None
+_depth_transform = None
+_detector = None
+_detector_processor = None
+
+# Prevent simultaneous requests from competing
+# for GPU memory or initializing models twice.
+_analysis_lock = threading.Lock()
 
 
 def synchronize_gpu():
-    """Wait for GPU operations to finish before timing."""
-    if DEVICE.type == "cuda":
+    if GPU_DEVICE.type == "cuda":
         torch.cuda.synchronize()
 
 
-def release_gpu_memory():
-    """Release unused GPU cache."""
-    gc.collect()
+def print_gpu_memory():
+    if GPU_DEVICE.type == "cuda":
+        allocated = torch.cuda.memory_allocated() / 1024**2
+        reserved = torch.cuda.memory_reserved() / 1024**2
 
-    if DEVICE.type == "cuda":
-        torch.cuda.empty_cache()
+        print(f"GPU allocated memory: {allocated:.0f} MiB")
+        print(f"GPU reserved memory:  {reserved:.0f} MiB")
 
 
-def analyze_image(image_path):
+def load_detector():
     """
-    Detect objects and estimate their distances.
-    Returns a dictionary suitable for a JSON API.
+    Load RT-DETRv2 once and reuse it.
+    The detector runs on CPU for this experiment.
     """
+    global _detector, _detector_processor
 
-    start_time = time.perf_counter()
-    image_path = Path(image_path)
+    if _detector is not None:
+        print("Reusing cached RT-DETRv2.")
+        return _detector, _detector_processor, 0.0
 
-    print("\n===================================")
-    print("VisionAid Image Analysis")
-    print("Device:", DEVICE)
-    print("Depth FP16 enabled:", USE_DEPTH_FP16)
-    print("===================================")
-
-    # ------------------------------------
-    # 1. Load image
-    # ------------------------------------
-
-    with Image.open(image_path) as source_image:
-        image = source_image.convert("RGB")
-
-    # ------------------------------------
-    # 2. Load RT-DETRv2
-    # ------------------------------------
-
-    print("\nLoading RT-DETRv2...")
-
-    detector_load_start = time.perf_counter()
+    print("\nLoading RT-DETRv2 for the first time...")
+    start = time.perf_counter()
 
     processor = RTDetrImageProcessor.from_pretrained(
         str(RTDETR_PATH)
@@ -88,34 +85,115 @@ def analyze_image(image_path):
 
     detector = RTDetrV2ForObjectDetection.from_pretrained(
         str(RTDETR_PATH)
-    ).to(DEVICE)
+    ).to(DETECTOR_DEVICE)
 
     detector.eval()
-    label_map = detector.config.id2label
+
+    _detector_processor = processor
+    _detector = detector
+
+    elapsed = time.perf_counter() - start
+
+    print(f"RT-DETRv2 loading time: {elapsed:.2f} seconds")
+
+    return detector, processor, elapsed
+
+
+def load_depth_pro():
+    """
+    Load Apple Depth Pro once and keep it in memory.
+    """
+    global _depth_model, _depth_transform
+
+    if _depth_model is not None:
+        print("Reusing cached Apple Depth Pro.")
+        return _depth_model, _depth_transform, 0.0
+
+    print("\nLoading Apple Depth Pro for the first time...")
+    start = time.perf_counter()
+
+    default_config = inspect.signature(
+        depth_pro.create_model_and_transforms
+    ).parameters["config"].default
+
+    config = replace(
+        default_config,
+        checkpoint_uri=str(DEPTH_CHECKPOINT)
+    )
+
+    use_fp16 = (
+        USE_DEPTH_FP16 and GPU_DEVICE.type == "cuda"
+    )
+
+    precision = (
+        torch.float16 if use_fp16 else torch.float32
+    )
+
+    model, transform = depth_pro.create_model_and_transforms(
+        config=config,
+        device=GPU_DEVICE,
+        precision=precision
+    )
+
+    model.eval()
 
     synchronize_gpu()
 
-    detector_load_time = (
-        time.perf_counter() - detector_load_start
-    )
+    _depth_model = model
+    _depth_transform = transform
 
-    print(
-        f"RT-DETRv2 loading time: "
-        f"{detector_load_time:.2f} seconds"
-    )
+    elapsed = time.perf_counter() - start
+
+    print(f"Depth Pro loading time: {elapsed:.2f} seconds")
+    print_gpu_memory()
+
+    return model, transform, elapsed
+
+
+def analyze_image(image_path):
+    """
+    Detect objects and estimate distances.
+    Cache both models for subsequent requests.
+    """
+
+    with _analysis_lock:
+        return _analyze_image_locked(image_path)
+
+
+def _analyze_image_locked(image_path):
+    start_time = time.perf_counter()
+    image_path = Path(image_path)
+
+    print("\n===================================")
+    print("VisionAid Image Analysis")
+    print("Depth device:", GPU_DEVICE)
+    print("Detector device:", DETECTOR_DEVICE)
+    print("===================================")
+
+    # ------------------------------------
+    # 1. Read image
+    # ------------------------------------
+
+    with Image.open(image_path) as source_image:
+        image = source_image.convert("RGB")
+
+    # ------------------------------------
+    # 2. Load or reuse RT-DETRv2
+    # ------------------------------------
+
+    detector, processor, detector_load_time = load_detector()
 
     # ------------------------------------
     # 3. Detect objects
     # ------------------------------------
 
     print("\nDetecting objects...")
-
     detection_start = time.perf_counter()
 
     inputs = processor(
         images=image,
         return_tensors="pt"
-    ).to(DEVICE)
+    ).to(DETECTOR_DEVICE)
 
     with torch.inference_mode():
         outputs = detector(**inputs)
@@ -133,91 +211,48 @@ def analyze_image(image_path):
         for key, value in results.items()
     }
 
-    synchronize_gpu()
+    detection_time = time.perf_counter() - detection_start
 
-    detection_time = (
-        time.perf_counter() - detection_start
-    )
+    print(f"RT-DETRv2 detection: {detection_time:.2f} seconds")
+    print("Objects detected:", len(results["scores"]))
 
-    print(
-        f"RT-DETRv2 detection time: "
-        f"{detection_time:.2f} seconds"
-    )
-
-    print(
-        "Objects detected:",
-        len(results["scores"])
-    )
+    del inputs, outputs
+    gc.collect()
 
     # ------------------------------------
-    # 4. Release RT-DETRv2 GPU memory
+    # 4. Load or reuse Depth Pro
     # ------------------------------------
 
-    del detector, inputs, outputs
-    release_gpu_memory()
+    depth_model, transform, depth_load_time = load_depth_pro()
 
     # ------------------------------------
-    # 5. Load Apple Depth Pro
-    # ------------------------------------
-
-    print("\nLoading Apple Depth Pro...")
-
-    depth_load_start = time.perf_counter()
-
-    default_config = inspect.signature(
-        depth_pro.create_model_and_transforms
-    ).parameters["config"].default
-
-    config = replace(
-        default_config,
-        checkpoint_uri=str(DEPTH_CHECKPOINT)
-    )
-
-    depth_model, transform = (
-        depth_pro.create_model_and_transforms(
-            config=config,
-            device=DEVICE
-        )
-    )
-
-    depth_model.eval()
-
-    synchronize_gpu()
-
-    depth_load_time = (
-        time.perf_counter() - depth_load_start
-    )
-
-    print(
-        f"Depth Pro loading time: "
-        f"{depth_load_time:.2f} seconds"
-    )
-
-    # ------------------------------------
-    # 6. Estimate depth using FP16 autocast
+    # 5. Estimate depth
     # ------------------------------------
 
     print("\nEstimating depth...")
-
-    depth_inference_start = time.perf_counter()
+    depth_start = time.perf_counter()
 
     depth_image, _, f_px = depth_pro.load_rgb(
         str(image_path)
     )
 
-    depth_input = transform(depth_image).to(DEVICE)
+    depth_input = transform(depth_image).to(GPU_DEVICE)
 
     use_autocast = (
-        USE_DEPTH_FP16 and DEVICE.type == "cuda"
+        USE_DEPTH_FP16 and GPU_DEVICE.type == "cuda"
     )
 
-    if use_autocast:
-        precision_context = torch.autocast(
+    precision_context = (
+        torch.autocast(
             device_type="cuda",
             dtype=torch.float16
         )
-    else:
-        precision_context = nullcontext()
+        if use_autocast
+        else nullcontext()
+    )
+
+    if GPU_DEVICE.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
 
     with torch.inference_mode():
         with precision_context:
@@ -226,7 +261,6 @@ def analyze_image(image_path):
                 f_px=f_px
             )
 
-    # Convert depth output to FP32 before NumPy.
     depth_map = (
         prediction["depth"]
         .detach()
@@ -237,24 +271,24 @@ def analyze_image(image_path):
 
     synchronize_gpu()
 
-    depth_inference_time = (
-        time.perf_counter() - depth_inference_start
-    )
+    depth_inference_time = time.perf_counter() - depth_start
 
     print(
-        f"Depth Pro inference time: "
+        f"Depth Pro inference: "
         f"{depth_inference_time:.2f} seconds"
     )
 
-    # ------------------------------------
-    # 7. Release Depth Pro GPU memory
-    # ------------------------------------
+    if GPU_DEVICE.type == "cuda":
+        peak = torch.cuda.max_memory_allocated() / 1024**2
+        print(f"Peak GPU memory: {peak:.0f} MiB")
 
-    del depth_model, depth_input, prediction
-    release_gpu_memory()
+    del depth_input, prediction
+
+    # Keep depth_model cached.
+    # Do not delete it or empty the GPU cache here.
 
     # ------------------------------------
-    # 8. Combine detections and distances
+    # 6. Combine detections and distances
     # ------------------------------------
 
     depth_height, depth_width = depth_map.shape
@@ -266,7 +300,6 @@ def analyze_image(image_path):
         results["labels"],
         results["boxes"]
     ):
-
         x1, y1, x2, y2 = box.tolist()
 
         center_x = (x1 + x2) / 2
@@ -280,17 +313,10 @@ def analyze_image(image_path):
             center_y * depth_height / image.height
         )
 
-        depth_x = max(
-            0, min(depth_x, depth_width - 1)
-        )
+        depth_x = max(0, min(depth_x, depth_width - 1))
+        depth_y = max(0, min(depth_y, depth_height - 1))
 
-        depth_y = max(
-            0, min(depth_y, depth_height - 1)
-        )
-
-        distance = float(
-            depth_map[depth_y, depth_x]
-        )
+        distance = float(depth_map[depth_y, depth_x])
 
         if not np.isfinite(distance) or distance <= 0:
             distance = None
@@ -298,7 +324,8 @@ def analyze_image(image_path):
             distance = round(distance, 2)
 
         objects.append({
-            "name": label_map[int(label)],
+            "name": label_map[int(label)]
+            if False else detector.config.id2label[int(label)],
             "confidence": round(float(score), 2),
             "estimated_distance_m": distance,
             "bounding_box": [
@@ -310,10 +337,8 @@ def analyze_image(image_path):
         })
 
     # ------------------------------------
-    # 9. Display performance results
+    # 7. Performance results
     # ------------------------------------
-
-    synchronize_gpu()
 
     total_time = time.perf_counter() - start_time
 
@@ -342,12 +367,7 @@ def analyze_image(image_path):
     )
 
     print("-----------------------------------")
-
-    print(
-        f"TOTAL PROCESSING TIME: "
-        f"{total_time:.2f} seconds"
-    )
-
+    print(f"TOTAL PROCESSING TIME: {total_time:.2f} seconds")
     print("===================================")
 
     return {

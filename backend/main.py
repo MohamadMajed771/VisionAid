@@ -3,15 +3,43 @@ import os
 import tempfile
 
 from pathlib import Path
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
-from backend.vision_analyzer import analyze_image
+from backend.vision_analyzer import (
+    analyze_image,
+    load_detector,
+    load_depth_pro
+)
+
+
+# Load AI models automatically when FastAPI starts
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("\n===================================")
+    print("Starting VisionAid API...")
+    print("Loading AI models...")
+    print("===================================")
+
+    # Run blocking model loading in a worker thread
+    await run_in_threadpool(load_detector)
+    await run_in_threadpool(load_depth_pro)
+
+    print("\n===================================")
+    print("VisionAid AI models are ready!")
+    print("===================================")
+
+    yield
+
+    print("\nShutting down VisionAid API...")
 
 
 app = FastAPI(
     title="VisionAid API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 
