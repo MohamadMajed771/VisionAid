@@ -1,0 +1,43 @@
+# API keys and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
+# Node.js
+node_modules/
+dist/
+
+# AI model weights
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.engine
+
+# Datasets and checkpoints
+datasets/
+checkpoints/
+
+# Downloaded third-party source code
+ai-models/depth-pro-source/
+
+# Hugging Face download cache
+**/.cache/huggingface/
+
+# Generated test images
+ai-models/depth_result.png
+ai-models/result.jpg
+ai-models/combined_result.jpg
+
+# Local backup files
+backend/vision_analyzer_backup.py
+
+# IDE
+.vscode/
+.idea/
