@@ -1,0 +1,20 @@
+{
+  "image": "WIN_20261019_13_35_37_Pro_compressed.jpg",
+  "image_width": 1280,
+  "image_height": 720,
+  "objects": [
+    {
+      "name": "person",
+      "class_id": 0,
+      "confidence": 0.9452,
+      "bounding_box": {
+        "x1": 159.13,
+        "y1": 116.07,
+        "x2": 1264.57,
+        "y2": 714.69
+      },
+      "depth_estimate": 0.764,
+      "depth_unit": null
+    }
+  ]
+}
