@@ -41,3 +41,6 @@ backend/vision_analyzer_backup.py
 # IDE
 .vscode/
 .idea/
+
+appsettings.Development.json
+benchmark_results
