@@ -21,24 +21,30 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AI_MODELS_DIR = PROJECT_ROOT / "ai-models"
 OUTPUT_DIR = AI_MODELS_DIR / "benchmark_results"
 
-RTDETR_REPO = Path(
-    r"C:\Users\HP\Desktop\RT-DETR-main\rtdetrv2_pytorch"
-)
+# Official RT-DETR repository and checkpoint
+RTDETR_REPO = AI_MODELS_DIR / "rtdetr-source" / "rtdetrv2_pytorch"
+
 RTDETR_CONFIG = (
-    RTDETR_REPO / "configs" / "rtdetrv2"
+    RTDETR_REPO
+    / "configs"
+    / "rtdetrv2"
     / "rtdetrv2_r18vd_120e_coco.yml"
 )
+
 RTDETR_CHECKPOINT = (
-    Path(r"C:\Users\HP\Desktop\RT-DETR-main")
+    AI_MODELS_DIR
+    / "rtdetr-v2"
     / "rtdetrv2_r18vd_120e_coco_rerun_48.1.pth"
 )
+
 LABELS_CONFIG = AI_MODELS_DIR / "rtdetr-v2" / "config.json"
 
-DEPTH_PRO_REPO = Path(
-    r"C:\Users\HP\Desktop\ml-depth-pro-main"
-)
+# Apple Depth Pro repository and checkpoint
+DEPTH_PRO_REPO = AI_MODELS_DIR / "depth-pro-source"
+DEPTH_PRO_SOURCE = DEPTH_PRO_REPO / "src"
+
 DEPTH_PRO_CHECKPOINT = (
-    DEPTH_PRO_REPO / "checkpoints" / "depth_pro.pt"
+    AI_MODELS_DIR / "depth-pro" / "depth_pro.pt"
 )
 
 CONFIDENCE_THRESHOLD = 0.5
@@ -47,12 +53,10 @@ DEVICE = torch.device(
     "cuda:0" if torch.cuda.is_available() else "cpu"
 )
 
-# FP16 is used for Depth Pro on CUDA.
 DEPTH_PRECISION = (
-    torch.half if DEVICE.type == "cuda" else torch.float32
+    torch.float16 if DEVICE.type == "cuda" else torch.float32
 )
 
-# GPU performance settings.
 if DEVICE.type == "cuda":
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -67,17 +71,17 @@ if DEVICE.type == "cuda":
     print(f"CUDA version: {torch.version.cuda}")
     print(f"Depth Pro precision: {DEPTH_PRECISION}")
 else:
-    print("WARNING: CUDA is unavailable; inference will run on CPU.")
+    print("WARNING: CUDA is unavailable; running on CPU.")
 
 
 def synchronize_gpu():
-    """Wait for queued CUDA operations before measuring elapsed time."""
+    """Synchronize CUDA before and after timing inference."""
     if DEVICE.type == "cuda":
         torch.cuda.synchronize()
 
 
 # ============================================================
-# 2. VERIFY FILES
+# 2. VERIFY REQUIRED FILES
 # ============================================================
 
 required_paths = [
@@ -85,13 +89,17 @@ required_paths = [
     RTDETR_CONFIG,
     RTDETR_CHECKPOINT,
     LABELS_CONFIG,
-    DEPTH_PRO_REPO,
+    DEPTH_PRO_SOURCE / "depth_pro",
     DEPTH_PRO_CHECKPOINT,
 ]
 
 for path in required_paths:
     if not path.exists():
-        raise FileNotFoundError(f"Required path not found: {path}")
+        raise FileNotFoundError(
+            f"Required path not found: {path}"
+        )
+
+print("All required model paths exist.")
 
 
 # ============================================================
@@ -114,6 +122,10 @@ label_map = {
 sys.path.insert(0, str(RTDETR_REPO))
 
 from src.core import YAMLConfig
+
+print("\nLoading RT-DETRv2...")
+
+detector_load_start = time.perf_counter()
 
 cfg = YAMLConfig(str(RTDETR_CONFIG))
 
@@ -142,16 +154,28 @@ postprocessor = cfg.postprocessor.deploy()
 del checkpoint, state_dict
 gc.collect()
 
-print("RT-DETRv2 loaded.")
+synchronize_gpu()
+
+detector_load_seconds = (
+    time.perf_counter() - detector_load_start
+)
+
+print(
+    f"RT-DETRv2 loaded in {detector_load_seconds:.3f} seconds."
+)
 
 
 # ============================================================
-# 5. LOAD DEPTH PRO ONCE, EXPLICITLY IN FP16 ON CUDA
+# 5. LOAD DEPTH PRO ONCE
 # ============================================================
 
-sys.path.insert(0, str(DEPTH_PRO_REPO))
+sys.path.insert(0, str(DEPTH_PRO_SOURCE))
 
 import depth_pro
+
+print("\nLoading Depth Pro...")
+
+depth_load_start = time.perf_counter()
 
 depth_signature = inspect.signature(
     depth_pro.create_model_and_transforms
@@ -159,9 +183,8 @@ depth_signature = inspect.signature(
 
 if "precision" not in depth_signature.parameters:
     raise RuntimeError(
-        "Your installed Depth Pro version does not expose the "
-        "'precision' argument. Check the Depth Pro installation "
-        "before continuing; FP16 has not been enabled."
+        "Your Depth Pro version does not expose the "
+        "'precision' parameter required by this script."
     )
 
 default_config = depth_signature.parameters["config"].default
@@ -184,16 +207,22 @@ depth_model.eval()
 actual_dtype = next(depth_model.parameters()).dtype
 actual_device = next(depth_model.parameters()).device
 
-print("Depth Pro loaded.")
-print(f"Depth Pro actual parameter dtype: {actual_dtype}")
-print(f"Depth Pro actual device: {actual_device}")
+synchronize_gpu()
+
+depth_load_seconds = time.perf_counter() - depth_load_start
+
+print(
+    f"Depth Pro loaded in {depth_load_seconds:.3f} seconds."
+)
+print(f"Depth Pro dtype: {actual_dtype}")
+print(f"Depth Pro device: {actual_device}")
 
 if DEVICE.type == "cuda" and actual_dtype != torch.float16:
     raise RuntimeError(
-        f"Expected FP16 Depth Pro on CUDA, but got {actual_dtype}."
+        f"Expected FP16 Depth Pro, got {actual_dtype}."
     )
 
-print("Both models are loaded and ready.")
+print("\nBoth models are loaded and ready.")
 
 
 # ============================================================
@@ -207,15 +236,15 @@ detector_transform = T.Compose([
 
 
 # ============================================================
-# 7. DEPTH ESTIMATION INSIDE A DETECTION
+# 7. ESTIMATE OBJECT DEPTH
 # ============================================================
 
 def estimate_object_depth(box, depth_array, image_size):
     """
-    Return median positive depth in the central part of a detection.
+    Estimate object depth using the median positive depth
+    in the central region of the detection bounding box.
 
-    Depth Pro's output is metric depth when its focal-length handling
-    is valid. This function does not independently verify accuracy.
+    This does not independently verify metric accuracy.
     """
     x1, y1, x2, y2 = box
 
@@ -229,6 +258,7 @@ def estimate_object_depth(box, depth_array, image_size):
             int(np.floor(x1 * depth_width / image_width)),
         ),
     )
+
     right = max(
         left + 1,
         min(
@@ -236,6 +266,7 @@ def estimate_object_depth(box, depth_array, image_size):
             int(np.ceil(x2 * depth_width / image_width)),
         ),
     )
+
     top = max(
         0,
         min(
@@ -243,6 +274,7 @@ def estimate_object_depth(box, depth_array, image_size):
             int(np.floor(y1 * depth_height / image_height)),
         ),
     )
+
     bottom = max(
         top + 1,
         min(
@@ -259,11 +291,19 @@ def estimate_object_depth(box, depth_array, image_size):
     height, width = region.shape
 
     inner = region[
-        height // 4 : max(height // 4 + 1, (3 * height) // 4),
-        width // 4 : max(width // 4 + 1, (3 * width) // 4),
+        height // 4 : max(
+            height // 4 + 1,
+            (3 * height) // 4,
+        ),
+        width // 4 : max(
+            width // 4 + 1,
+            (3 * width) // 4,
+        ),
     ]
 
-    valid = inner[np.isfinite(inner) & (inner > 0)]
+    valid = inner[
+        np.isfinite(inner) & (inner > 0)
+    ]
 
     if valid.size == 0:
         return None
@@ -272,7 +312,7 @@ def estimate_object_depth(box, depth_array, image_size):
 
 
 # ============================================================
-# 8. WARM UP BOTH MODELS ONCE
+# 8. WARM UP BOTH MODELS
 # ============================================================
 
 def warm_up_models():
@@ -299,8 +339,6 @@ def warm_up_models():
 
     print("Warming up Depth Pro...")
 
-    # Depth Pro's internal model resolution is 1536 x 1536.
-    # A dummy input warms up CUDA without opening an actual photo.
     dummy_depth_input = torch.zeros(
         (3, depth_model.img_size, depth_model.img_size),
         device=DEVICE,
@@ -331,7 +369,7 @@ def process_image(image_path):
 
     total_start = time.perf_counter()
 
-    # Load image.
+    # Load image
     with Image.open(image_path) as source:
         image = source.convert("RGB")
 
@@ -349,7 +387,6 @@ def process_image(image_path):
         .to(DEVICE)
     )
 
-    # Preserve the width, height ordering from your working script.
     original_size = torch.tensor(
         [[original_width, original_height]],
         device=DEVICE,
@@ -368,6 +405,7 @@ def process_image(image_path):
 
     with torch.inference_mode():
         outputs = detector(image_tensor)
+
         labels, boxes, scores = postprocessor(
             outputs,
             original_size,
@@ -375,7 +413,9 @@ def process_image(image_path):
 
     synchronize_gpu()
 
-    detector_seconds = time.perf_counter() - detector_start
+    detector_seconds = (
+        time.perf_counter() - detector_start
+    )
 
     labels = labels[0].detach().cpu()
     boxes = boxes[0].detach().cpu()
@@ -398,7 +438,10 @@ def process_image(image_path):
         ]
 
         detections.append({
-            "name": label_map.get(class_id, f"class_{class_id}"),
+            "name": label_map.get(
+                class_id,
+                f"class_{class_id}",
+            ),
             "class_id": class_id,
             "confidence": confidence,
             "box": (x1, y1, x2, y2),
@@ -437,7 +480,6 @@ def process_image(image_path):
 
     depth_seconds = time.perf_counter() - depth_start
 
-    # Transfer the depth map to CPU only after inference is complete.
     depth_map = (
         prediction["depth"]
         .detach()
@@ -445,15 +487,16 @@ def process_image(image_path):
         .cpu()
         .numpy()
     )
+
     depth_map = np.squeeze(depth_map)
 
     if depth_map.ndim != 2:
         raise ValueError(
-            f"Expected 2D depth map, got shape {depth_map.shape}"
+            f"Expected 2D depth map, got {depth_map.shape}"
         )
 
     # --------------------------------------------------------
-    # Draw boxes and build JSON
+    # Draw detections and prepare JSON
     # --------------------------------------------------------
 
     draw = ImageDraw.Draw(image)
@@ -483,7 +526,9 @@ def process_image(image_path):
         objects.append({
             "name": item["name"],
             "class_id": item["class_id"],
-            "confidence": round(item["confidence"], 4),
+            "confidence": round(
+                item["confidence"], 4
+            ),
             "bounding_box": {
                 "x1": round(x1, 2),
                 "y1": round(y1, 2),
@@ -501,6 +546,7 @@ def process_image(image_path):
     output_image = (
         OUTPUT_DIR / f"{image_path.stem}_result.jpg"
     )
+
     output_json = (
         OUTPUT_DIR / f"{image_path.stem}_result.json"
     )
@@ -509,9 +555,30 @@ def process_image(image_path):
         "image": image_path.name,
         "image_width": original_width,
         "image_height": original_height,
+        "detection_model": "RT-DETRv2-R18",
         "depth_model": "Depth Pro",
         "depth_precision": str(actual_dtype),
         "objects": objects,
+        "timings": {
+            "rtdetr_load_seconds": round(
+                detector_load_seconds, 3
+            ),
+            "depth_pro_load_seconds": round(
+                depth_load_seconds, 3
+            ),
+            "rtdetr_preprocessing_seconds": round(
+                detector_preprocess_seconds, 3
+            ),
+            "rtdetr_inference_seconds": round(
+                detector_seconds, 3
+            ),
+            "depth_preprocessing_seconds": round(
+                depth_preprocess_seconds, 3
+            ),
+            "depth_inference_seconds": round(
+                depth_seconds, 3
+            ),
+        },
     }
 
     with open(output_json, "w", encoding="utf-8") as file:
@@ -526,17 +593,44 @@ def process_image(image_path):
 
     total_seconds = time.perf_counter() - total_start
 
+    result["timings"]["total_processing_seconds"] = round(
+        total_seconds, 3
+    )
+
+    # Update JSON with total processing time
+    with open(output_json, "w", encoding="utf-8") as file:
+        json.dump(
+            result,
+            file,
+            indent=2,
+            ensure_ascii=False,
+        )
+
     print(f"\nImage: {image_path.name}")
     print(f"Detections: {len(objects)}")
-    print(f"RT-DETRv2 preprocessing: {detector_preprocess_seconds:.3f} s")
-    print(f"RT-DETRv2 inference:     {detector_seconds:.3f} s")
-    print(f"Depth Pro preprocessing: {depth_preprocess_seconds:.3f} s")
-    print(f"Depth Pro inference:     {depth_seconds:.3f} s")
-    print(f"Total processing:        {total_seconds:.3f} s")
+    print(
+        f"RT-DETRv2 preprocessing: "
+        f"{detector_preprocess_seconds:.3f} s"
+    )
+    print(
+        f"RT-DETRv2 inference:     "
+        f"{detector_seconds:.3f} s"
+    )
+    print(
+        f"Depth Pro preprocessing: "
+        f"{depth_preprocess_seconds:.3f} s"
+    )
+    print(
+        f"Depth Pro inference:     "
+        f"{depth_seconds:.3f} s"
+    )
+    print(
+        f"Total processing:        "
+        f"{total_seconds:.3f} s"
+    )
     print(f"Annotated image: {output_image}")
     print(f"JSON: {output_json}\n")
 
-    # Release image-specific data but keep both models loaded.
     del depth_input, prediction, depth_map, depth_rgb
     gc.collect()
 
@@ -554,7 +648,9 @@ try:
                 'Enter full image path (or "q" to quit): '
             ).strip().strip('"')
 
-            if image_input.lower() in {"q", "quit", "exit"}:
+            if image_input.lower() in {
+                "q", "quit", "exit"
+            }:
                 break
 
             if not image_input:
@@ -567,7 +663,9 @@ try:
             break
 
         except Exception as error:
-            print(f"Could not process image: {error}\n")
+            print(
+                f"Could not process image: {error}\n"
+            )
 
 finally:
     del depth_model, detector
