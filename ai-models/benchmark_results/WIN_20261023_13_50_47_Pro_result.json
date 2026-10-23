@@ -1,0 +1,22 @@
+{
+  "image": "WIN_20261023_13_50_47_Pro.jpg",
+  "image_width": 1280,
+  "image_height": 720,
+  "depth_model": "Depth Pro",
+  "depth_precision": "torch.float16",
+  "objects": [
+    {
+      "name": "person",
+      "class_id": 0,
+      "confidence": 0.9502,
+      "bounding_box": {
+        "x1": 235.3,
+        "y1": 199.37,
+        "x2": 1271.26,
+        "y2": 715.51
+      },
+      "depth_estimate": 1.684,
+      "depth_unit": null
+    }
+  ]
+}
