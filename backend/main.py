@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from backend.vision_analyzer import (
     analyze_image,
     load_detector,
-    load_depth_pro
+    load_unidepth
 )
 
 
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
     # Run blocking model loading in a worker thread
     await run_in_threadpool(load_detector)
-    await run_in_threadpool(load_depth_pro)
+    await run_in_threadpool(load_unidepth)
 
     print("\n===================================")
     print("VisionAid AI models are ready!")

@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AI_MODELS_DIR = PROJECT_ROOT / "ai-models"
-OUTPUT_DIR = AI_MODELS_DIR / "benchmark_results"
+OUTPUT_DIR = AI_MODELS_DIR / "benchmark_results_unidepth"
 
 # Official RT-DETR repository and checkpoint
 RTDETR_REPO = AI_MODELS_DIR / "rtdetr-source" / "rtdetrv2_pytorch"
@@ -39,12 +39,15 @@ RTDETR_CHECKPOINT = (
 
 LABELS_CONFIG = AI_MODELS_DIR / "rtdetr-v2" / "config.json"
 
-# Apple Depth Pro repository and checkpoint
-DEPTH_PRO_REPO = AI_MODELS_DIR / "depth-pro-source"
-DEPTH_PRO_SOURCE = DEPTH_PRO_REPO / "src"
+# UniDepth V2 Small repository and checkpoint
+UNIDEPTH_REPO = AI_MODELS_DIR / "unidepth-source"
 
-DEPTH_PRO_CHECKPOINT = (
-    AI_MODELS_DIR / "depth-pro" / "depth_pro.pt"
+UNIDEPTH_CONFIG = (
+    UNIDEPTH_REPO / "configs" / "config_v2_vits14.json"
+)
+
+UNIDEPTH_CHECKPOINT = (
+    UNIDEPTH_REPO / "weights" / "unidepth_v2_small.safetensors"
 )
 
 CONFIDENCE_THRESHOLD = 0.5
@@ -69,7 +72,7 @@ print(f"Device: {DEVICE}")
 if DEVICE.type == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
     print(f"CUDA version: {torch.version.cuda}")
-    print(f"Depth Pro precision: {DEPTH_PRECISION}")
+    print("UniDepth precision: FP32")
 else:
     print("WARNING: CUDA is unavailable; running on CPU.")
 
@@ -89,8 +92,9 @@ required_paths = [
     RTDETR_CONFIG,
     RTDETR_CHECKPOINT,
     LABELS_CONFIG,
-    DEPTH_PRO_SOURCE / "depth_pro",
-    DEPTH_PRO_CHECKPOINT,
+    UNIDEPTH_REPO,
+    UNIDEPTH_CONFIG,
+    UNIDEPTH_CHECKPOINT,
 ]
 
 for path in required_paths:
@@ -165,43 +169,44 @@ print(
 )
 
 
+
 # ============================================================
-# 5. LOAD DEPTH PRO ONCE
+# 5. LOAD UNIDEPTH V2 SMALL ONCE
 # ============================================================
 
-sys.path.insert(0, str(DEPTH_PRO_SOURCE))
+from safetensors.torch import load_file
 
-import depth_pro
+sys.path.insert(0, str(UNIDEPTH_REPO))
 
-print("\nLoading Depth Pro...")
+from unidepth.models import UniDepthV2
+
+print("\nLoading UniDepth V2 Small...")
 
 depth_load_start = time.perf_counter()
 
-depth_signature = inspect.signature(
-    depth_pro.create_model_and_transforms
+# Read model configuration
+with open(UNIDEPTH_CONFIG, "r", encoding="utf-8") as file:
+    depth_config = json.load(file)
+
+# Create model
+depth_model = UniDepthV2(depth_config)
+
+# Load downloaded checkpoint
+depth_weights = load_file(
+    str(UNIDEPTH_CHECKPOINT),
+    device="cpu"
 )
 
-if "precision" not in depth_signature.parameters:
-    raise RuntimeError(
-        "Your Depth Pro version does not expose the "
-        "'precision' parameter required by this script."
-    )
-
-default_config = depth_signature.parameters["config"].default
-
-depth_config = replace(
-    default_config,
-    checkpoint_uri=str(DEPTH_PRO_CHECKPOINT),
+load_result = depth_model.load_state_dict(
+    depth_weights,
+    strict=True
 )
 
-depth_model, depth_transform = (
-    depth_pro.create_model_and_transforms(
-        config=depth_config,
-        device=DEVICE,
-        precision=DEPTH_PRECISION,
-    )
-)
+del depth_weights
+gc.collect()
 
+# Move model to GPU
+depth_model = depth_model.to(DEVICE)
 depth_model.eval()
 
 actual_dtype = next(depth_model.parameters()).dtype
@@ -212,17 +217,13 @@ synchronize_gpu()
 depth_load_seconds = time.perf_counter() - depth_load_start
 
 print(
-    f"Depth Pro loaded in {depth_load_seconds:.3f} seconds."
+    f"UniDepth V2 Small loaded in {depth_load_seconds:.3f} seconds."
 )
-print(f"Depth Pro dtype: {actual_dtype}")
-print(f"Depth Pro device: {actual_device}")
-
-if DEVICE.type == "cuda" and actual_dtype != torch.float16:
-    raise RuntimeError(
-        f"Expected FP16 Depth Pro, got {actual_dtype}."
-    )
+print(f"UniDepth dtype: {actual_dtype}")
+print(f"UniDepth device: {actual_device}")
 
 print("\nBoth models are loaded and ready.")
+
 
 
 # ============================================================
@@ -316,33 +317,14 @@ def estimate_object_depth(box, depth_array, image_size):
 # ============================================================
 
 def warm_up_models():
-    print("\nWarming up RT-DETRv2...")
+    
+    print("Warming up UniDepth V2 Small...")
 
-    dummy_detector_input = torch.zeros(
-        (1, 3, 640, 640),
-        device=DEVICE,
-    )
-
-    dummy_size = torch.tensor(
-        [[640, 640]],
-        device=DEVICE,
-    )
-
-    with torch.inference_mode():
-        outputs = detector(dummy_detector_input)
-        _ = postprocessor(outputs, dummy_size)
-
-    synchronize_gpu()
-
-    del dummy_detector_input, dummy_size, outputs
-    gc.collect()
-
-    print("Warming up Depth Pro...")
-
+    # Dummy RGB image: 3 channels, height 480, width 640
     dummy_depth_input = torch.zeros(
-        (3, depth_model.img_size, depth_model.img_size),
+        (3, 480, 640),
         device=DEVICE,
-        dtype=DEPTH_PRECISION,
+        dtype=torch.uint8,
     )
 
     with torch.inference_mode():
@@ -352,6 +334,7 @@ def warm_up_models():
 
     del dummy_depth_input
     gc.collect()
+
 
     print("Warm-up complete.\n")
 
@@ -448,38 +431,52 @@ def process_image(image_path):
         })
 
     # --------------------------------------------------------
-    # Depth Pro preprocessing
+    # UniDepth V2 preprocessing
     # --------------------------------------------------------
 
     depth_preprocess_start = time.perf_counter()
 
-    depth_rgb, _, focal_length_px = depth_pro.load_rgb(
-        str(image_path)
+    depth_input = torch.from_numpy(
+    np.array(image)
+).permute(2, 0, 1).contiguous().to(DEVICE)
+
+    depth_preprocess_seconds = (
+        time.perf_counter() - depth_preprocess_start
     )
 
-    depth_input = depth_transform(depth_rgb)
+    
+    # --------------------------------------------------------
+    # UniDepth V2 preprocessing
+    # --------------------------------------------------------
+
+    depth_preprocess_start = time.perf_counter()
+
+    # Convert the original RGB image to a tensor
+    depth_input = torch.from_numpy(
+        np.array(image)
+    ).permute(2, 0, 1).contiguous().to(DEVICE)
+
+    synchronize_gpu()
 
     depth_preprocess_seconds = (
         time.perf_counter() - depth_preprocess_start
     )
 
     # --------------------------------------------------------
-    # Depth Pro inference
+    # UniDepth V2 inference
     # --------------------------------------------------------
 
     synchronize_gpu()
     depth_start = time.perf_counter()
 
     with torch.inference_mode():
-        prediction = depth_model.infer(
-            depth_input,
-            f_px=focal_length_px,
-        )
+        prediction = depth_model.infer(depth_input)
 
     synchronize_gpu()
 
     depth_seconds = time.perf_counter() - depth_start
 
+    # Convert depth prediction to a 2D NumPy array
     depth_map = (
         prediction["depth"]
         .detach()
@@ -494,6 +491,7 @@ def process_image(image_path):
         raise ValueError(
             f"Expected 2D depth map, got {depth_map.shape}"
         )
+
 
     # --------------------------------------------------------
     # Draw detections and prepare JSON
@@ -556,14 +554,14 @@ def process_image(image_path):
         "image_width": original_width,
         "image_height": original_height,
         "detection_model": "RT-DETRv2-R18",
-        "depth_model": "Depth Pro",
+        "depth_model": "UniDepth V2 Small",
         "depth_precision": str(actual_dtype),
         "objects": objects,
         "timings": {
             "rtdetr_load_seconds": round(
                 detector_load_seconds, 3
             ),
-            "depth_pro_load_seconds": round(
+            "unidepth_load_seconds": round(
                 depth_load_seconds, 3
             ),
             "rtdetr_preprocessing_seconds": round(
@@ -617,11 +615,11 @@ def process_image(image_path):
         f"{detector_seconds:.3f} s"
     )
     print(
-        f"Depth Pro preprocessing: "
+        f"UniDepth preprocessing: "
         f"{depth_preprocess_seconds:.3f} s"
     )
     print(
-        f"Depth Pro inference:     "
+        f"UniDepth inference:     "
         f"{depth_seconds:.3f} s"
     )
     print(
@@ -631,7 +629,7 @@ def process_image(image_path):
     print(f"Annotated image: {output_image}")
     print(f"JSON: {output_json}\n")
 
-    del depth_input, prediction, depth_map, depth_rgb
+    del depth_input, prediction, depth_map
     gc.collect()
 
 

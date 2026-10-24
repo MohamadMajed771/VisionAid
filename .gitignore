@@ -25,7 +25,7 @@ datasets/
 checkpoints/
 
 # Downloaded third-party source code
-ai-models/depth-pro-source/
+ai-models/rtdetr-source/
 
 # Hugging Face download cache
 **/.cache/huggingface/
