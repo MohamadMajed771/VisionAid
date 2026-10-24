@@ -35,6 +35,10 @@ ai-models/depth_result.png
 ai-models/result.jpg
 ai-models/combined_result.jpg
 
+# Local AI benchmark results
+ai-models/benchmark_results/
+ai-models/benchmark_results_unidepth/
+
 # Local backup files
 backend/vision_analyzer_backup.py
 
