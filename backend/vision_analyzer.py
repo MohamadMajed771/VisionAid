@@ -1,14 +1,13 @@
-
 import gc
-import inspect
 import threading
 import time
 
-from contextlib import nullcontext
-from dataclasses import replace
 from pathlib import Path
 
-import depth_pro
+import sys
+import json
+
+from safetensors.torch import load_file
 import numpy as np
 import torch
 
@@ -27,8 +26,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 RTDETR_PATH = BASE_DIR / "ai-models" / "rtdetr-v2"
 
+UNIDEPTH_REPO = BASE_DIR / "ai-models" / "unidepth-source"
+
+UNIDEPTH_CONFIG = (
+    UNIDEPTH_REPO / "configs" / "config_v2_vits14.json"
+)
+
 DEPTH_CHECKPOINT = (
-    BASE_DIR / "ai-models" / "depth-pro" / "depth_pro.pt"
+    UNIDEPTH_REPO / "weights" / "unidepth_v2_small.safetensors"
 )
 
 GPU_DEVICE = torch.device(
@@ -37,9 +42,6 @@ GPU_DEVICE = torch.device(
 
 # Keep RT-DETRv2 on CPU to avoid GPU memory conflicts.
 DETECTOR_DEVICE = torch.device("cpu")
-
-# Use FP16 for Depth Pro when CUDA is available.
-USE_DEPTH_FP16 = True
 
 # Experimental GPU cache cleanup.
 # Set to False if performance becomes worse.
@@ -51,7 +53,6 @@ CLEAR_UNUSED_GPU_CACHE = True
 # ------------------------------------
 
 _depth_model = None
-_depth_transform = None
 
 _detector = None
 _detector_processor = None
@@ -163,70 +164,65 @@ def load_detector():
 
 
 # ------------------------------------
-# Load Apple Depth Pro
+# Load UniDepth V2 Small
 # ------------------------------------
 
-def load_depth_pro():
+def load_unidepth():
     """
-    Load Apple Depth Pro only once.
+    Load UniDepth V2 Small only once.
 
     Keep the model in GPU memory for reuse.
     """
 
-    global _depth_model, _depth_transform
+    global _depth_model
 
     if _depth_model is not None:
-        print("Reusing cached Apple Depth Pro.")
-        return _depth_model, _depth_transform, 0.0
+        print("Reusing cached UniDepth V2 Small.")
+        return _depth_model, None, 0.0
 
-    print("\nLoading Apple Depth Pro for the first time...")
+    print("\nLoading UniDepth V2 Small for the first time...")
 
     start = time.perf_counter()
 
-    default_config = inspect.signature(
-        depth_pro.create_model_and_transforms
-    ).parameters["config"].default
+    # Import UniDepth from the local repository
+    if str(UNIDEPTH_REPO) not in sys.path:
+        sys.path.insert(0, str(UNIDEPTH_REPO))
 
-    config = replace(
-        default_config,
-        checkpoint_uri=str(DEPTH_CHECKPOINT)
+    from unidepth.models import UniDepthV2
+
+    # Read model configuration
+    with open(UNIDEPTH_CONFIG, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    # Create model
+    model = UniDepthV2(config)
+
+    # Load pretrained weights
+    weights = load_file(
+        str(DEPTH_CHECKPOINT),
+        device="cpu"
     )
 
-    use_fp16 = (
-        USE_DEPTH_FP16
-        and GPU_DEVICE.type == "cuda"
-    )
+    model.load_state_dict(weights, strict=True)
 
-    precision = (
-        torch.float16
-        if use_fp16
-        else torch.float32
-    )
-
-    model, transform = depth_pro.create_model_and_transforms(
-        config=config,
-        device=GPU_DEVICE,
-        precision=precision
-    )
-
-    model.eval()
+    # Move model to GPU if available
+    model = model.to(GPU_DEVICE).eval()
 
     synchronize_gpu()
 
     _depth_model = model
-    _depth_transform = transform
 
     elapsed = time.perf_counter() - start
 
     print(
-        f"Depth Pro loading time: "
+        f"UniDepth V2 Small loading time: "
         f"{elapsed:.2f} seconds"
     )
 
-    print("\nGPU memory after loading Depth Pro:")
+    print("\nGPU memory after loading UniDepth:")
     print_gpu_memory()
 
-    return model, transform, elapsed
+    return model, None, elapsed
 
 
 # ------------------------------------
@@ -235,7 +231,7 @@ def load_depth_pro():
 
 def analyze_image(image_path):
     """
-    Analyze an image using RT-DETRv2 and Depth Pro.
+    Analyze an image using RT-DETRv2 and UniDepth V2 Small.
 
     Both models are reused from memory.
     """
@@ -316,10 +312,10 @@ def _analyze_image_locked(image_path):
     gc.collect()
 
     # ------------------------------------
-    # 4. Load or reuse Depth Pro
+    # 4. Load or reuse UniDepth
     # ------------------------------------
 
-    depth_model, transform, depth_load_time = load_depth_pro()
+    depth_model, _, depth_load_time = load_unidepth()
 
     # ------------------------------------
     # 5. Estimate depth
@@ -329,37 +325,17 @@ def _analyze_image_locked(image_path):
 
     depth_start = time.perf_counter()
 
-    depth_image, _, f_px = depth_pro.load_rgb(
-        str(image_path)
-    )
-
-    depth_input = transform(depth_image).to(
-        GPU_DEVICE
-    )
-
-    use_autocast = (
-        USE_DEPTH_FP16
-        and GPU_DEVICE.type == "cuda"
-    )
-
-    precision_context = (
-        torch.autocast(
-            device_type="cuda",
-            dtype=torch.float16
-        )
-        if use_autocast
-        else nullcontext()
-    )
+    # Convert the existing RGB image to a tensor
+    depth_input = torch.from_numpy(
+        np.array(image).copy()
+    ).permute(2, 0, 1).contiguous().to(GPU_DEVICE)
 
     if GPU_DEVICE.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
 
+    # UniDepth V2 Small inference in FP32
     with torch.inference_mode():
-        with precision_context:
-            prediction = depth_model.infer(
-                depth_input,
-                f_px=f_px
-            )
+        prediction = depth_model.infer(depth_input)
 
     synchronize_gpu()
 
@@ -368,7 +344,7 @@ def _analyze_image_locked(image_path):
     )
 
     print(
-        f"Depth Pro inference time: "
+        f"UniDepth V2 Small inference time: "
         f"{depth_inference_time:.2f} seconds"
     )
 
@@ -385,6 +361,7 @@ def _analyze_image_locked(image_path):
 
     depth_map = (
         prediction["depth"]
+        .squeeze()
         .detach()
         .float()
         .cpu()
@@ -397,7 +374,7 @@ def _analyze_image_locked(image_path):
     # 6. Release unused GPU cache
     # ------------------------------------
 
-    # Depth Pro remains loaded in GPU memory.
+    # UniDepth remains loaded in GPU memory.
     # Only unused cached allocations are released.
 
     clear_unused_gpu_cache()
@@ -496,12 +473,12 @@ def _analyze_image_locked(image_path):
     )
 
     print(
-        f"Depth Pro loading:   "
+        f"UniDepth loading:   "
         f"{depth_load_time:.2f} seconds"
     )
 
     print(
-        f"Depth Pro inference: "
+        f"UniDepth inference: "
         f"{depth_inference_time:.2f} seconds"
     )
 

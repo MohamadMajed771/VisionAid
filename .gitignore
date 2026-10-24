@@ -65,8 +65,7 @@ checkpoints/
 
 # ========================================
 # Downloaded third-party source code
-# ========================================
-ai-models/depth-pro-source/
+ai-models/rtdetr-source/
 
 # ========================================
 # Generated outputs and benchmarks
@@ -76,9 +75,11 @@ ai-models/depth_result.png
 ai-models/result.jpg
 ai-models/combined_result.jpg
 
-# ========================================
-# Local backups
-# ========================================
+# Local AI benchmark results
+ai-models/benchmark_results/
+ai-models/benchmark_results_unidepth/
+
+# Local backup files
 backend/vision_analyzer_backup.py
 
 # ========================================
