@@ -19,6 +19,11 @@ dist/
 *.safetensors
 *.onnx
 *.engine
+# PaddleOCR downloaded models
+ai-models/paddleocr-models/
+
+# Whisper downloaded models (future integration)
+ai-models/whisper-models/
 
 # Datasets and checkpoints
 datasets/
