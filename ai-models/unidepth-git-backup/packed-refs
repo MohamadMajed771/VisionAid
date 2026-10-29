@@ -1,0 +1,4 @@
+# pack-refs with: peeled fully-peeled sorted 
+2612d17b0dec8cd76850cd28c3a46dfd7769cfa8 refs/remotes/origin/knn_onnxcam
+8d8cfe4c7ee15297099983607febf0d4f32eb3d6 refs/remotes/origin/main
+dd5332d42e27f1fe78f5492bdb8af0fc42767c2d refs/remotes/origin/requirements

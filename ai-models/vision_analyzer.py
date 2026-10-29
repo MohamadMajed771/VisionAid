@@ -1,32 +1,36 @@
+
 import gc
 import threading
 import time
-
-from pathlib import Path
-
 import sys
 import json
 
-from safetensors.torch import load_file
+from pathlib import Path
+
 import numpy as np
 import torch
 
+from safetensors.torch import load_file
 from PIL import Image
 from transformers import (
     RTDetrImageProcessor,
     RTDetrV2ForObjectDetection
 )
 
+# PaddleOCR integration
+# PyTorch is imported first to preserve the working import order.
+from paddleocr_recognizer import load_ocr, recognize_text
+
 
 # ------------------------------------
-# Project configuration
+# 1. Project configuration
 # ------------------------------------
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
-RTDETR_PATH = BASE_DIR / "ai-models" / "rtdetr-v2"
+RTDETR_PATH = BASE_DIR / "rtdetr-v2"
 
-UNIDEPTH_REPO = BASE_DIR / "ai-models" / "unidepth-source"
+UNIDEPTH_REPO = BASE_DIR / "unidepth-source"
 
 UNIDEPTH_CONFIG = (
     UNIDEPTH_REPO / "configs" / "config_v2_vits14.json"
@@ -44,12 +48,13 @@ GPU_DEVICE = torch.device(
 DETECTOR_DEVICE = torch.device("cpu")
 
 # Experimental GPU cache cleanup.
-# Set to False if performance becomes worse.
 CLEAR_UNUSED_GPU_CACHE = True
+
+DETECTION_THRESHOLD = 0.5
 
 
 # ------------------------------------
-# Cached AI models
+# 2. Cached AI models
 # ------------------------------------
 
 _depth_model = None
@@ -57,13 +62,13 @@ _depth_model = None
 _detector = None
 _detector_processor = None
 
-# Prevent simultaneous image analyses from
-# competing for GPU memory.
+# Prevent simultaneous analyses from competing
+# for GPU memory or shared model resources.
 _analysis_lock = threading.Lock()
 
 
 # ------------------------------------
-# GPU utility functions
+# 3. GPU utility functions
 # ------------------------------------
 
 def synchronize_gpu():
@@ -120,7 +125,7 @@ def clear_unused_gpu_cache():
 
 
 # ------------------------------------
-# Load RT-DETRv2
+# 4. Load RT-DETRv2
 # ------------------------------------
 
 def load_detector():
@@ -164,7 +169,7 @@ def load_detector():
 
 
 # ------------------------------------
-# Load UniDepth V2 Small
+# 5. Load UniDepth V2 Small
 # ------------------------------------
 
 def load_unidepth():
@@ -184,20 +189,20 @@ def load_unidepth():
 
     start = time.perf_counter()
 
-    # Import UniDepth from the local repository
+    # Import UniDepth from the local repository.
     if str(UNIDEPTH_REPO) not in sys.path:
         sys.path.insert(0, str(UNIDEPTH_REPO))
 
     from unidepth.models import UniDepthV2
 
-    # Read model configuration
+    # Read model configuration.
     with open(UNIDEPTH_CONFIG, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # Create model
+    # Create model.
     model = UniDepthV2(config)
 
-    # Load pretrained weights
+    # Load pretrained weights.
     weights = load_file(
         str(DEPTH_CHECKPOINT),
         device="cpu"
@@ -205,7 +210,7 @@ def load_unidepth():
 
     model.load_state_dict(weights, strict=True)
 
-    # Move model to GPU if available
+    # Move model to GPU if available.
     model = model.to(GPU_DEVICE).eval()
 
     synchronize_gpu()
@@ -226,14 +231,20 @@ def load_unidepth():
 
 
 # ------------------------------------
-# Analyze image
+# 6. Analyze image
 # ------------------------------------
 
 def analyze_image(image_path):
     """
-    Analyze an image using RT-DETRv2 and UniDepth V2 Small.
+    Analyze an image using three AI models:
 
-    Both models are reused from memory.
+    1. RT-DETRv2: Object detection
+    2. UniDepth V2: Distance estimation
+    3. PaddleOCR: Text recognition
+
+    Models are reused from memory.
+
+    Return one combined JSON-compatible dictionary.
     """
 
     with _analysis_lock:
@@ -251,22 +262,25 @@ def _analyze_image_locked(image_path):
 
     print("Depth device:", GPU_DEVICE)
     print("Detector device:", DETECTOR_DEVICE)
+    print("OCR device: CPU")
 
     # ------------------------------------
-    # 1. Read image
+    # 7. Read image
     # ------------------------------------
 
     with Image.open(image_path) as source_image:
         image = source_image.convert("RGB")
 
+    print(f"Image size: {image.width} x {image.height}")
+
     # ------------------------------------
-    # 2. Load or reuse RT-DETRv2
+    # 8. Load or reuse RT-DETRv2
     # ------------------------------------
 
     detector, processor, detector_load_time = load_detector()
 
     # ------------------------------------
-    # 3. Detect objects
+    # 9. Detect objects
     # ------------------------------------
 
     print("\nDetecting objects...")
@@ -283,7 +297,7 @@ def _analyze_image_locked(image_path):
 
     results = processor.post_process_object_detection(
         outputs,
-        threshold=0.5,
+        threshold=DETECTION_THRESHOLD,
         target_sizes=torch.tensor([
             (image.height, image.width)
         ])
@@ -312,20 +326,20 @@ def _analyze_image_locked(image_path):
     gc.collect()
 
     # ------------------------------------
-    # 4. Load or reuse UniDepth
+    # 10. Load or reuse UniDepth
     # ------------------------------------
 
     depth_model, _, depth_load_time = load_unidepth()
 
     # ------------------------------------
-    # 5. Estimate depth
+    # 11. Estimate depth
     # ------------------------------------
 
     print("\nEstimating depth...")
 
     depth_start = time.perf_counter()
 
-    # Convert the existing RGB image to a tensor
+    # Convert RGB image to tensor.
     depth_input = torch.from_numpy(
         np.array(image).copy()
     ).permute(2, 0, 1).contiguous().to(GPU_DEVICE)
@@ -333,7 +347,7 @@ def _analyze_image_locked(image_path):
     if GPU_DEVICE.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
 
-    # UniDepth V2 Small inference in FP32
+    # UniDepth V2 Small inference in FP32.
     with torch.inference_mode():
         prediction = depth_model.infer(depth_input)
 
@@ -371,7 +385,7 @@ def _analyze_image_locked(image_path):
     del depth_input, prediction
 
     # ------------------------------------
-    # 6. Release unused GPU cache
+    # 12. Release unused GPU cache
     # ------------------------------------
 
     # UniDepth remains loaded in GPU memory.
@@ -380,8 +394,10 @@ def _analyze_image_locked(image_path):
     clear_unused_gpu_cache()
 
     # ------------------------------------
-    # 7. Combine objects and distances
+    # 13. Combine objects and distances
     # ------------------------------------
+
+    print("\nCombining objects and estimated distances...")
 
     depth_height, depth_width = depth_map.shape
 
@@ -428,7 +444,7 @@ def _analyze_image_locked(image_path):
         else:
             distance = round(distance, 2)
 
-        objects.append({
+        object_data = {
             "name": detector.config.id2label[int(label)],
             "confidence": round(float(score), 2),
             "estimated_distance_m": distance,
@@ -438,10 +454,49 @@ def _analyze_image_locked(image_path):
                 round(x2, 2),
                 round(y2, 2)
             ]
-        })
+        }
+
+        objects.append(object_data)
+
+        print(
+            f"Object: {object_data['name']} | "
+            f"Confidence: {object_data['confidence']} | "
+            f"Distance: {object_data['estimated_distance_m']} m"
+        )
 
     # ------------------------------------
-    # 8. GPU memory measurements
+    # 14. PaddleOCR text recognition
+    # ------------------------------------
+
+    print("\n===================================")
+    print("PaddleOCR Text Recognition")
+    print("===================================")
+
+    ocr_start = time.perf_counter()
+
+    # load_ocr() is cached by paddleocr_recognizer.py.
+    # The model will not reload on each image.
+    ocr_result = recognize_text(image_path)
+
+    ocr_time = time.perf_counter() - ocr_start
+
+    texts = ocr_result["texts"]
+
+    print(
+        f"PaddleOCR inference time: "
+        f"{ocr_time:.2f} seconds"
+    )
+
+    print("Texts detected:", len(texts))
+
+    for text_data in texts:
+        print(
+            f"Text: {text_data['text']} | "
+            f"Confidence: {text_data['confidence']}"
+        )
+
+    # ------------------------------------
+    # 15. GPU memory measurements
     # ------------------------------------
 
     print("\n===================================")
@@ -451,7 +506,7 @@ def _analyze_image_locked(image_path):
     print_gpu_memory()
 
     # ------------------------------------
-    # 9. Performance results
+    # 16. Performance results
     # ------------------------------------
 
     total_time = (
@@ -473,13 +528,18 @@ def _analyze_image_locked(image_path):
     )
 
     print(
-        f"UniDepth loading:   "
+        f"UniDepth loading:    "
         f"{depth_load_time:.2f} seconds"
     )
 
     print(
-        f"UniDepth inference: "
+        f"UniDepth inference:  "
         f"{depth_inference_time:.2f} seconds"
+    )
+
+    print(
+        f"PaddleOCR inference: "
+        f"{ocr_time:.2f} seconds"
     )
 
     print("-----------------------------------")
@@ -491,7 +551,17 @@ def _analyze_image_locked(image_path):
 
     print("===================================")
 
-    return {
+    # ------------------------------------
+    # 17. Combined JSON response
+    # ------------------------------------
+
+    combined_result = {
         "objects_detected": len(objects),
-        "objects": objects
+        "objects": objects,
+        "texts_detected": len(texts),
+        "texts": texts
     }
+
+    print("\nCombined analysis completed successfully!")
+
+    return combined_result
