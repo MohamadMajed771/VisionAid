@@ -17,9 +17,10 @@ from transformers import (
     RTDetrV2ForObjectDetection
 )
 
-# PaddleOCR integration
-# PyTorch is imported first to preserve the working import order.
-from paddleocr_recognizer import load_ocr, recognize_text
+# Communicate with the separate PaddleOCR GPU server.
+import requests
+
+OCR_SERVER_URL = "http://127.0.0.1:8001/recognize-text"
 
 
 # ------------------------------------
@@ -44,8 +45,10 @@ GPU_DEVICE = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
-# Keep RT-DETRv2 on CPU to avoid GPU memory conflicts.
-DETECTOR_DEVICE = torch.device("cpu")
+# Run RT-DETRv2 on the NVIDIA GPU when CUDA is available.
+DETECTOR_DEVICE = torch.device(
+    "cuda:0" if torch.cuda.is_available() else "cpu"
+)
 
 # Experimental GPU cache cleanup.
 CLEAR_UNUSED_GPU_CACHE = True
@@ -262,8 +265,7 @@ def _analyze_image_locked(image_path):
 
     print("Depth device:", GPU_DEVICE)
     print("Detector device:", DETECTOR_DEVICE)
-    print("OCR device: CPU")
-
+    print("OCR device: GPU (separate OCR server)")
     # ------------------------------------
     # 7. Read image
     # ------------------------------------
@@ -307,6 +309,8 @@ def _analyze_image_locked(image_path):
         key: value.cpu()
         for key, value in results.items()
     }
+
+    synchronize_gpu()
 
     detection_time = (
         time.perf_counter() - detection_start
@@ -474,9 +478,26 @@ def _analyze_image_locked(image_path):
 
     ocr_start = time.perf_counter()
 
-    # load_ocr() is cached by paddleocr_recognizer.py.
-    # The model will not reload on each image.
-    ocr_result = recognize_text(image_path)
+    # Send the image to the separate PaddleOCR GPU server.
+    # PaddleOCR stays loaded in the OCR worker process.
+
+    try:
+        with open(image_path, "rb") as image_file:
+            response = requests.post(
+                OCR_SERVER_URL,
+                files={
+                    "file": (image_path.name, image_file)
+                },
+                timeout=60
+            )
+
+        response.raise_for_status()
+        ocr_result = response.json()
+
+    except requests.RequestException as e:
+        raise RuntimeError(
+            f"PaddleOCR GPU server request failed: {e}"
+        ) from e
 
     ocr_time = time.perf_counter() - ocr_start
 

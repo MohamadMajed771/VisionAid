@@ -47,7 +47,7 @@ def load_ocr():
             use_doc_unwarping=False,
             use_textline_orientation=False,
             enable_mkldnn=False,
-            device="cpu"
+            device="gpu:0"
         )
 
         elapsed = time.perf_counter() - start

@@ -52,3 +52,20 @@ backend/vision_analyzer_backup.py
 .idea/
 
 appsettings.Development.json
+
+# Python virtual environments
+ocr-env/
+.venv/
+venv/
+
+# Python secrets
+.env
+.env.*
+
+# Local AI model weights
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.pdmodel
+*.pdiparams

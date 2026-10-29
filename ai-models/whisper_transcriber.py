@@ -1,7 +1,14 @@
-
+import os
 import time
 import threading
 from pathlib import Path
+
+import torch
+
+# Make PyTorch's bundled CUDA libraries available on Windows.
+if os.name == "nt":
+    torch_lib_path = Path(torch.__file__).resolve().parent / "lib"
+    os.add_dll_directory(str(torch_lib_path))
 
 from faster_whisper import WhisperModel
 
@@ -14,8 +21,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 WHISPER_MODEL_PATH = BASE_DIR / "whisper-models"
 
-WHISPER_DEVICE = "cpu"
-WHISPER_COMPUTE_TYPE = "int8"
+WHISPER_DEVICE = "cuda"
+WHISPER_COMPUTE_TYPE = "float16"
 
 # Cached Whisper model
 _whisper_model = None
@@ -39,13 +46,12 @@ def load_whisper():
         start = time.perf_counter()
 
         _whisper_model = WhisperModel(
-                str(WHISPER_MODEL_PATH),
-                device="cpu",
-                compute_type="int8",
-                cpu_threads=4,
-                num_workers=1,
-                local_files_only=True
-            )
+            str(WHISPER_MODEL_PATH),
+            device=WHISPER_DEVICE,
+            compute_type=WHISPER_COMPUTE_TYPE,
+            num_workers=1,
+            local_files_only=True
+        )
 
         elapsed = time.perf_counter() - start
 

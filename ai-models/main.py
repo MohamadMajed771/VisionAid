@@ -2,6 +2,8 @@
 import os
 import tempfile
 
+import traceback
+
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -11,8 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from vision_analyzer import (
     analyze_image,
     load_detector,
-    load_unidepth,
-    load_ocr
+    load_unidepth
 )
 
 from whisper_transcriber import (
@@ -61,7 +62,7 @@ async def lifespan(app: FastAPI):
 
     await run_in_threadpool(load_detector)
     await run_in_threadpool(load_unidepth)
-    await run_in_threadpool(load_ocr)
+    
     await run_in_threadpool(load_whisper)
 
     print("\n===================================")
@@ -157,6 +158,7 @@ async def analyze_uploaded_image(
     except Exception as e:
 
         print("Image analysis error:", e)
+        traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
