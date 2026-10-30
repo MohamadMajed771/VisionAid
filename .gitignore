@@ -1,76 +1,41 @@
-
-# ========================================
-# Secrets and environment variables
-# ========================================
+# API keys and secrets
 .env
 .env.*
 !.env.example
 
-# .NET local configuration
-appsettings.Development.json
-appsettings.*.local.json
-secrets.json
-
-# ========================================
-# .NET build output
-# ========================================
-**/bin/
-**/obj/
-.vs/
-*.user
-*.suo
-
-# ========================================
 # Python
-# ========================================
 __pycache__/
-*.py[cod]
+*.pyc
 *.egg-info/
 .venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
 
-# ========================================
 # Node.js
-# ========================================
 node_modules/
 dist/
-.next/
-coverage/
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
 
-# ========================================
-# AI model weights and engines
-# ========================================
+# AI model weights
 *.pt
 *.pth
 *.safetensors
 *.onnx
 *.engine
-*.tflite
+# PaddleOCR downloaded models
+ai-models/paddleocr-models/
 
-# ========================================
-# Datasets, checkpoints, and caches
-# ========================================
+# Whisper downloaded models (future integration)
+ai-models/whisper-models/
+
+# Datasets and checkpoints
 datasets/
 checkpoints/
-**/.cache/huggingface/
 
-# ========================================
 # Downloaded third-party source code
 ai-models/rtdetr-source/
 
-# ========================================
-# Generated outputs and benchmarks
-# ========================================
-**/benchmark_results/
+# Hugging Face download cache
+**/.cache/huggingface/
+
+# Generated test images
 ai-models/depth_result.png
 ai-models/result.jpg
 ai-models/combined_result.jpg
@@ -82,10 +47,25 @@ ai-models/benchmark_results_unidepth/
 # Local backup files
 backend/vision_analyzer_backup.py
 
-# ========================================
-# IDE and operating system files
-# ========================================
+# IDE
 .vscode/
 .idea/
-.DS_Store
-Thumbs.db
+
+appsettings.Development.json
+
+# Python virtual environments
+ocr-env/
+.venv/
+venv/
+
+# Python secrets
+.env
+.env.*
+
+# Local AI model weights
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.pdmodel
+*.pdiparams
