@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 from safetensors.torch import load_file
-from PIL import Image
+from PIL import Image, ImageDraw
 from transformers import (
     RTDetrImageProcessor,
     RTDetrV2ForObjectDetection
@@ -247,7 +247,10 @@ def analyze_image(image_path):
 
     Models are reused from memory.
 
-    Return one combined JSON-compatible dictionary.
+    Return three results:
+    1. Original JSON response
+    2. ASP.NET Core compatible JSON response
+    3. Annotated PIL image
     """
 
     with _analysis_lock:
@@ -406,6 +409,8 @@ def _analyze_image_locked(image_path):
     depth_height, depth_width = depth_map.shape
 
     objects = []
+    annotated_image = image.copy()
+    draw = ImageDraw.Draw(annotated_image)
 
     for score, label, box in zip(
         results["scores"],
@@ -461,6 +466,18 @@ def _analyze_image_locked(image_path):
         }
 
         objects.append(object_data)
+
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            outline="red",
+            width=3
+        )
+
+        draw.text(
+            (x1, max(0, y1 - 18)),
+            f"{object_data['name']}: {object_data['confidence']:.2f}",
+            fill="red"
+        )
 
         print(
             f"Object: {object_data['name']} | "
@@ -582,7 +599,41 @@ def _analyze_image_locked(image_path):
         "texts_detected": len(texts),
         "texts": texts
     }
+    backend_result = {
+    "image": image_path.name,
+    "imageWidth": image.width,
+    "imageHeight": image.height,
+    "depthModel": "UniDepth V2 Small",
+    "depthPrecision": "torch.float32",
+    "detectedObjects": [
+        {
+            "label": obj["name"],
+            "confidence": obj["confidence"],
+            "depth": obj["estimated_distance_m"],
+            "depthUnit": (
+                "meters"
+                if obj["estimated_distance_m"] is not None
+                else None
+            ),
+            "x1": obj["bounding_box"][0],
+            "y1": obj["bounding_box"][1],
+            "x2": obj["bounding_box"][2],
+            "y2": obj["bounding_box"][3]
+        }
+        for obj in objects
+    ],
+    "ocrResults": [
+        {
+            "extractedText": item["text"],
+            "confidence": item["confidence"],
+            "boundingBox": item.get("bounding_box")
+        }
+        for item in texts
+    ],
+    "question": None,
+    "answer": None
+}
 
     print("\nCombined analysis completed successfully!")
 
-    return combined_result
+    return combined_result, backend_result, annotated_image

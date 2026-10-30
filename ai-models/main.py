@@ -1,7 +1,11 @@
+import io
+import json
+import zipfile
 
+from fastapi.responses import StreamingResponse
 import os
 import tempfile
-
+from fastapi import Form
 import traceback
 
 from pathlib import Path
@@ -148,12 +152,12 @@ async def analyze_uploaded_image(
             temp_file.write(image_bytes)
             temporary_path = Path(temp_file.name)
 
-        result = await run_in_threadpool(
+        combined_result, _, _ = await run_in_threadpool(
             analyze_image,
             temporary_path
         )
 
-        return result
+        return combined_result
 
     except Exception as e:
 
@@ -168,6 +172,125 @@ async def analyze_uploaded_image(
     finally:
 
         await file.close()
+
+        if temporary_path is not None:
+            try:
+                os.remove(temporary_path)
+            except FileNotFoundError:
+                pass
+
+
+@app.post("/analyze")
+async def analyze_frame_for_backend(
+    image: UploadFile = File(...),
+    question: str | None = Form(None)
+):
+    # Validate image format
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPEG and PNG images are allowed."
+        )
+
+    image_bytes = await image.read(MAX_IMAGE_SIZE + 1)
+
+    if len(image_bytes) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="Image exceeds the 10 MB limit."
+        )
+
+    if not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Image file is empty."
+        )
+
+    suffix = ALLOWED_IMAGE_TYPES[image.content_type]
+    temporary_path = None
+
+    try:
+        # Save uploaded image temporarily
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix
+        ) as temp_file:
+            temp_file.write(image_bytes)
+            temporary_path = Path(temp_file.name)
+
+        # Run object detection, depth estimation, OCR
+        _, backend_result, annotated_image = (
+            await run_in_threadpool(
+                analyze_image,
+                temporary_path
+            )
+        )
+
+        # Add the user's question to the analysis JSON
+        backend_result["question"] = question
+        backend_result["answer"] = None
+
+        # Preserve the original uploaded filename
+        backend_result["image"] = (
+            (image.filename or "image.jpg")
+            .replace("\\", "/")
+            .split("/")[-1]
+        )
+
+        # Create annotated image in memory
+        image_buffer = io.BytesIO()
+        annotated_image.save(
+            image_buffer,
+            format="JPEG",
+            quality=90
+        )
+
+        # Create ZIP in memory
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(
+            zip_buffer,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+
+            archive.writestr(
+                "analysis.json",
+                json.dumps(
+                    backend_result,
+                    indent=2,
+                    ensure_ascii=False
+                )
+            )
+
+            archive.writestr(
+                "annotated.jpg",
+                image_buffer.getvalue()
+            )
+
+        zip_buffer.seek(0)
+
+        # Return ZIP to ASP.NET Core
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition":
+                    'attachment; filename="analysis.zip"'
+            }
+        )
+
+    except Exception as e:
+        print("Backend analysis error:", e)
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Backend image analysis failed."
+        )
+
+    finally:
+        await image.close()
 
         if temporary_path is not None:
             try:
@@ -236,7 +359,12 @@ async def transcribe_uploaded_audio(
             temporary_path
         )
 
-        return result
+        question = result["transcription"]
+
+        return {
+            **result,
+            "question": question
+        }
 
     except Exception as e:
 
