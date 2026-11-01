@@ -69,3 +69,4 @@ venv/
 *.onnx
 *.pdmodel
 *.pdiparams
+start_visionaid.bat

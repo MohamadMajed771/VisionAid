@@ -1,20 +1,15 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class StreamSession
 {
-    public long Id { get; set; }
+    public int SessionId { get; set; }
+    public int UserId { get; set; }
 
-    public long? UserId { get; set; }
-
-    public required string ClientType { get; set; }
-
-    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
-
+    public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
-
     public string Status { get; set; } = "Active";
 
-    public User? User { get; set; }
+    public User User { get; set; } = null!;
 
     public ICollection<Frame> Frames { get; set; }
         = new List<Frame>();

@@ -1,0 +1,33 @@
+{
+  "image": "20261101_133350_929.jpg",
+  "imageWidth": 553,
+  "imageHeight": 612,
+  "depthModel": "UniDepth V2 Small",
+  "depthPrecision": "torch.float32",
+  "detectedObjects": [
+    {
+      "label": "stop sign",
+      "confidence": 0.93,
+      "depth": 4.41,
+      "depthUnit": "meters",
+      "x1": 361.58,
+      "y1": 158.4,
+      "x2": 422.09,
+      "y2": 233.7
+    }
+  ],
+  "ocrResults": [
+    {
+      "extractedText": "STOP",
+      "confidence": 0.999,
+      "boundingBox": [
+        356,
+        168,
+        425,
+        220
+      ]
+    }
+  ],
+  "question": null,
+  "answer": null
+}

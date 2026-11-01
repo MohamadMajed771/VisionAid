@@ -1,21 +1,14 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class Answer
 {
-    public long Id { get; set; }
+    public int AnswerId { get; set; }
+    public int QuestionId { get; set; }
+    public int AnalyzedFrameId { get; set; }
 
-    public long QuestionId { get; set; }
-
-    public required string AnswerText { get; set; }
-
-    public required string Language { get; set; }
-
-    public string ConfidenceStatus { get; set; } = "Uncertain";
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string AnswerText { get; set; } = null!;
+    public DateTime CreatedAt { get; set; }
 
     public Question Question { get; set; } = null!;
-
-    public ICollection<AnswerFrame> AnswerFrames { get; set; }
-        = new List<AnswerFrame>();
+    public AnalyzedFrame AnalyzedFrame { get; set; } = null!;
 }

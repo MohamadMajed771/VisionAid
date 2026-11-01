@@ -1,16 +1,16 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class User
 {
-    public long Id { get; set; }
+    public int UserId { get; set; }
 
-    public required string FullName { get; set; }
+    public string Name { get; set; } = null!;
+    public string Email { get; set; } = null!;
 
-    public required string Email { get; set; }
+    // Language used for questions and spoken answers.
+    public string PreferredLanguage { get; set; } = "en";
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    public UserPreference? Preferences { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public ICollection<StreamSession> StreamSessions { get; set; }
         = new List<StreamSession>();

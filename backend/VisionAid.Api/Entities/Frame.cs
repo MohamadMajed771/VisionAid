@@ -1,28 +1,16 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class Frame
 {
-    public long Id { get; set; }
+    public int FrameId { get; set; }
+    public int SessionId { get; set; }
 
-    public long SessionId { get; set; }
-
-    public required string ImagePath { get; set; }
-
+    public string ImagePath { get; set; } = null!;
     public DateTime CapturedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
-    public double? SharpnessScore { get; set; }
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    // Navigation properties
     public StreamSession Session { get; set; } = null!;
 
-    public ICollection<OcrResult> OcrResults { get; set; }
-        = new List<OcrResult>();
-
-    public ICollection<DetectedObject> DetectedObjects { get; set; }
-        = new List<DetectedObject>();
-
-    public ICollection<AnswerFrame> AnswerFrames { get; set; }
-        = new List<AnswerFrame>();
+    public ICollection<AnalyzedFrame> AnalyzedFrames { get; set; }
+        = new List<AnalyzedFrame>();
 }

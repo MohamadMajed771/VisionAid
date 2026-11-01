@@ -1,15 +1,12 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class Question
 {
-    public long Id { get; set; }
+    public int QuestionId { get; set; }
+    public int SessionId { get; set; }
 
-    public long SessionId { get; set; }
-
-    public required string QuestionText { get; set; }
-
-    public DateTime AskedAt { get; set; } = DateTime.UtcNow;
-
+    public DateTime AskedAt { get; set; }
+    public string QuestionText { get; set; } = null!;
     public StreamSession Session { get; set; } = null!;
 
     public Answer? Answer { get; set; }

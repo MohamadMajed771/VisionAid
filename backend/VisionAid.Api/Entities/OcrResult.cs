@@ -1,16 +1,10 @@
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class OcrResult
-{
-    public long Id { get; set; }
+{    public int OCRResultId { get; set; }
+    public int AnalyzedFrameId { get; set; }
 
-    public long FrameId { get; set; }
-
-    public required string ExtractedText { get; set; }
-
-    public double? Confidence { get; set; }
-
-    public string? BoundingBox { get; set; }
-
-    public Frame Frame { get; set; } = null!;
+    public string ExtractedText { get; set; } = null!; //null on compile but not in db
+    public float Confidence { get; set; }
+    public AnalyzedFrame AnalyzedFrame { get; set; } = null!;
 }

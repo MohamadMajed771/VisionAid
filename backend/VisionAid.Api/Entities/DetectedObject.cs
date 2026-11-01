@@ -1,23 +1,18 @@
-
-namespace VisionAid.Api.Entities;
+namespace VisionAid.Api.Models;
 
 public class DetectedObject
 {
-    public long Id { get; set; }
+    public int DetectedObjectId { get; set; }
+    public int AnalyzedFrameId { get; set; }
 
-    public long FrameId { get; set; }
+    public string Label { get; set; } = null!;
+    public float Confidence { get; set; }
+    public float Depth { get; set; }
 
-    public required string Label { get; set; }
+public float X1 { get; set; }
+public float Y1 { get; set; }
+public float X2 { get; set; }
+public float Y2 { get; set; }
 
-    public int? ClassId { get; set; }
-
-    public double Confidence { get; set; }
-
-    public required string BoundingBox { get; set; }
-
-    public double? DepthEstimate { get; set; }
-
-    public string? DepthUnit { get; set; }
-
-    public Frame Frame { get; set; } = null!;
+    public AnalyzedFrame AnalyzedFrame { get; set; } = null!;
 }

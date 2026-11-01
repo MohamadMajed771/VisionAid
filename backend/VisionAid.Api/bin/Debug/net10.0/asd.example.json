@@ -1,0 +1,21 @@
+
+
+
+
+{
+    
+    "Khla2 file esmo": "appsettings.Development.json w eemol mn hone copy paste bas akid shil hayde",
+
+
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3306;Database=visionaid // hasab esma eendak ;User ID=root;Password=;"
+  }
+
+}
