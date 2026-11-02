@@ -6,7 +6,7 @@ public class User
 
     public string Name { get; set; } = null!;
     public string Email { get; set; } = null!;
-
+    public string? PasswordHash { get; set; }
     // Language used for questions and spoken answers.
     public string PreferredLanguage { get; set; } = "en";
 

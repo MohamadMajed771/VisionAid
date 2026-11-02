@@ -29,16 +29,14 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("USERS");
             entity.HasKey(u => u.UserId);
-
             entity.Property(u => u.Name)
                 .HasMaxLength(150);
-
             entity.Property(u => u.Email)
                 .HasMaxLength(256);
-
             entity.HasIndex(u => u.Email)
                 .IsUnique();
-
+            entity.Property(u => u.PasswordHash)
+                .HasMaxLength(500);
             entity.Property(u => u.PreferredLanguage)
                 .HasMaxLength(10)
                 .HasDefaultValue("en");

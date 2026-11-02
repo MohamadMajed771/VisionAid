@@ -1,0 +1,9 @@
+namespace VisionAid.Api.DTOs;
+
+public class RegisterRequest
+{
+    public string Name { get; set; } = null!;
+    public string Email { get; set; } = null!;
+    public string Password { get; set; } = null!;
+    public string PreferredLanguage { get; set; } = "en";
+}
