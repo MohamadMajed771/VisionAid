@@ -28,8 +28,7 @@ public class FramesController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadFrame(
         int sessionId,
-        [FromForm] IFormFile image,
-        [FromForm] string? question)
+     [FromForm] UploadFrameRequestDto request)
     {
         var userIdClaim = User.FindFirstValue(
             ClaimTypes.NameIdentifier);
@@ -43,13 +42,13 @@ public class FramesController : ControllerBase
             var uploadedFrame = await _frameService.UploadFrameAsync(
                 sessionId,
                 userId,
-                image);
+                request.Image);
 
             // Send the original image to FastAPI and save its results.
             var answer = await _analysisService.AnalyzeFrameAsync(
                 uploadedFrame.FrameId,
                 uploadedFrame.ImagePath,
-                question);
+                request.Question);
 
             var response = new UploadAndAnalyzeFrameResponseDto
             {
