@@ -69,4 +69,16 @@ venv/
 *.onnx
 *.pdmodel
 *.pdiparams
-start_visionaid.bat
+
+
+# Local Python environments
+ai-models/ocr-env/
+
+# Additional AI model files
+*.ckpt
+*.bin
+*.gguf
+
+# Temporary files
+*.tmp
+*.log

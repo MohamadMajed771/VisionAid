@@ -2,6 +2,8 @@ import io
 import json
 import zipfile
 
+from PIL import Image
+
 from fastapi.responses import StreamingResponse
 import os
 import tempfile
@@ -23,6 +25,11 @@ from vision_analyzer import (
 from whisper_transcriber import (
     load_whisper,
     transcribe_audio
+)
+
+from llama32_response_generator import (
+    load_model as load_llama,
+    generate_answer
 )
 
 
@@ -64,10 +71,68 @@ async def lifespan(app: FastAPI):
     print("Loading AI models...")
     print("===================================")
 
+    # Load RT-DETRv2
     await run_in_threadpool(load_detector)
+
+    # Load UniDepth V2
     await run_in_threadpool(load_unidepth)
-    
+
+    # Load Whisper
     await run_in_threadpool(load_whisper)
+
+    # Preload Llama 3.2 through Ollama
+    await run_in_threadpool(load_llama)
+
+    
+    # Warm up image analysis models automatically
+    print("\nWarming up VisionAid image models...")
+
+    warmup_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".jpg",
+            delete=False
+        ) as temp_file:
+            warmup_path = temp_file.name
+
+        # Generate a temporary RGB image
+        Image.new(
+            "RGB",
+            (224, 224),
+            color=(128, 128, 128)
+        ).save(warmup_path)
+
+        await run_in_threadpool(
+            analyze_image,
+            warmup_path
+        )
+
+        print("VisionAid image models warmed up successfully!")
+
+    finally:
+        if warmup_path and os.path.exists(warmup_path):
+            os.remove(warmup_path)
+
+        # Warm up Llama 3.2
+    print("\nWarming up Llama 3.2...")
+
+    llm_result = await run_in_threadpool(
+        generate_answer,
+        "What is in front of me?",
+        [
+            {
+                "label": "chair",
+                "depth": 2.0
+            }
+        ],
+        []
+    )
+
+    if llm_result is not None and llm_result.get("answer"):
+        print("Llama 3.2 warmed up successfully!")
+    else:
+        print("WARNING: Llama 3.2 warm-up failed.")
 
     print("\n===================================")
     print("All VisionAid AI models are ready!")
@@ -227,8 +292,65 @@ async def analyze_frame_for_backend(
         )
 
         # Add the user's question to the analysis JSON
+        # Add the user's question to the analysis JSON
         backend_result["question"] = question
         backend_result["answer"] = None
+
+        # Generate an answer only when a question is provided
+        if question and question.strip():
+
+            print("\nGenerating VisionAid answer with Llama 3.2...")
+
+            llm_result = await run_in_threadpool(
+                generate_answer,
+                question.strip(),
+                backend_result.get("detectedObjects", []),
+                backend_result.get("ocrResults", [])
+            )
+
+            if llm_result is not None and llm_result.get("answer"):
+                backend_result["answer"] = llm_result["answer"]
+
+                print("Llama 3.2 answer:", backend_result["answer"])
+                print(
+                    "LLM processing time:",
+                    llm_result["processing_time_seconds"],
+                    "seconds"
+                )
+                print(
+                    "Ollama internal duration:",
+                    llm_result["ollama_total_seconds"],
+                    "seconds"
+                )
+                print(
+                    "LLM model loading:",
+                    llm_result["model_load_seconds"],
+                    "seconds"
+                )
+
+                print(
+                    "LLM prompt processing:",
+                    llm_result["prompt_processing_seconds"],
+                    "seconds"
+                )
+
+                print(
+                    "LLM generation:",
+                    llm_result["generation_seconds"],
+                    "seconds"
+                )
+
+                print(
+                    "LLM prompt tokens:",
+                    llm_result["prompt_tokens"]
+                )
+
+                print(
+                    "LLM generated tokens:",
+                    llm_result["total_tokens"]
+                )
+            else:
+                print("WARNING: Llama 3.2 returned no usable answer.")
 
         # Preserve the original uploaded filename
         backend_result["image"] = (
