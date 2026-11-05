@@ -51,6 +51,7 @@ backend/vision_analyzer_backup.py
 .vscode/
 .idea/
 
+
 appsettings.Development.json
 
 # Python virtual environments
@@ -70,3 +71,13 @@ venv/
 *.pdmodel
 *.pdiparams
 start_visionaid.bat
+
+
+# Visual Studio
+.vs/
+**/.vs/
+*.vsidx
+
+# .NET build outputs
+**/bin/
+**/obj/

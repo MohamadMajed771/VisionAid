@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Expo generated files
+.expo/
+
+# Git
+.git/
+
+# Visual Studio temporary files
+.vs/
+**/.vs/
+**/*.vsidx
+
+# Backend build artifacts
+**/bin/
+**/obj/
+
+# Local development files
+*.log

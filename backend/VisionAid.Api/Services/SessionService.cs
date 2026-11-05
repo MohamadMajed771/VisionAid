@@ -1,6 +1,7 @@
-
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using VisionAid.Api.Data;
+using VisionAid.Api.DTOs.Analysis;
 using VisionAid.Api.DTOs.Sessions;
 using VisionAid.Api.Models;
 using VisionAid.Api.Services.Interfaces;
@@ -16,19 +17,28 @@ public class SessionService : ISessionService
         _context = context;
     }
 
-    public async Task<SessionResponseDto?> CreateAsync(
-        CreateSessionRequestDto  request)
+    // CREATE SESSION
+    public async Task<SessionResponseDto?> CreateAsync(int userId)
     {
         var userExists = await _context.Users
-            .AnyAsync(u => u.UserId == request.UserId);
-            //one record at least
+            .AnyAsync(u => u.UserId == userId);
 
         if (!userExists)
             return null;
 
+        // A user can have only one active session.
+        var activeSessionExists = await _context.StreamSessions
+            .AnyAsync(s =>
+                s.UserId == userId &&
+                s.Status == "Active");
+
+        if (activeSessionExists)
+            throw new InvalidOperationException(
+                "The user already has an active session.");
+
         var session = new StreamSession
         {
-            UserId = request.UserId,
+            UserId = userId,
             StartedAt = DateTime.UtcNow,
             Status = "Active"
         };
@@ -39,20 +49,39 @@ public class SessionService : ISessionService
         return MapToResponse(session);
     }
 
-    public async Task<SessionResponseDto?> GetByIdAsync(
-        int sessionId)
+    // GET ACTIVE SESSION FOR USER
+    public async Task<SessionResponseDto?> GetActiveAsync(int userId)
     {
         var session = await _context.StreamSessions
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            .FirstOrDefaultAsync(s =>
+                s.UserId == userId &&
+                s.Status == "Active");
 
         return session is null ? null : MapToResponse(session);
     }
 
-    public async Task<bool> EndAsync(int sessionId)
+    // GET SESSION BY ID, ONLY IF IT BELONGS TO USER
+    public async Task<SessionResponseDto?> GetByIdAsync(
+        int sessionId,
+        int userId)
     {
         var session = await _context.StreamSessions
-            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s =>
+                s.SessionId == sessionId &&
+                s.UserId == userId);
+
+        return session is null ? null : MapToResponse(session);
+    }
+
+    // END SESSION, ONLY IF IT BELONGS TO USER
+    public async Task<bool> EndAsync(int sessionId, int userId)
+    {
+        var session = await _context.StreamSessions
+            .FirstOrDefaultAsync(s =>
+                s.SessionId == sessionId &&
+                s.UserId == userId);
 
         if (session is null)
             return false;
@@ -64,10 +93,12 @@ public class SessionService : ISessionService
         session.EndedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
         return true;
     }
 
-    private static SessionResponseDto    MapToResponse(
+    // MAP ENTITY TO RESPONSE DTO
+    private static SessionResponseDto MapToResponse(
         StreamSession session)
     {
         return new SessionResponseDto
@@ -79,4 +110,20 @@ public class SessionService : ISessionService
             Status = session.Status
         };
     }
+
+    
+public async Task<List<SessionResponseDto>> GetEndedAsync(int userId)
+{
+    var sessions = await _context.StreamSessions
+        .AsNoTracking()
+        .Where(s =>
+            s.UserId == userId &&
+            s.Status == "Ended")
+        .OrderByDescending(s => s.StartedAt)
+        .ToListAsync();
+
+    return sessions
+        .Select(MapToResponse)
+        .ToList();
+}
 }

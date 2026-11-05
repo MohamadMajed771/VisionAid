@@ -1,11 +1,14 @@
+
 using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using VisionAid.Api.Data;
 using VisionAid.Api.DTOs.Analysis;
 using VisionAid.Api.DTOs.Frames;
+using VisionAid.Api.DTOs.Sessions;
 using VisionAid.Api.Models;
 using VisionAid.Api.Services.Interfaces;
+
 
 namespace VisionAid.Api.Services;
 
@@ -24,26 +27,34 @@ public class FrameService : IFrameService
 
     public async Task<UploadFrameResponseDto> UploadFrameAsync(
         int sessionId,
+        int userId,
         IFormFile image)
     {
+        // 1. Find the session and verify ownership.
         var session = await _context.StreamSessions
-            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            .FirstOrDefaultAsync(s =>
+                s.SessionId == sessionId &&
+                s.UserId == userId);
 
         if (session is null)
-            throw new KeyNotFoundException("Session not found.");
+            throw new KeyNotFoundException(
+                "Session not found.");
 
+        // 2. Make sure the session is active.
         if (session.Status != "Active")
             throw new InvalidOperationException(
                 "Cannot upload frames to an ended session.");
 
-        if (image.Length == 0)
-            throw new ArgumentException("The uploaded image is empty.");
+        // 3. Validate the uploaded image.
+        if (image is null || image.Length == 0)
+            throw new ArgumentException(
+                "The uploaded image is empty.");
 
-        // Get Backend folder (parent of VisionAid.Api).
+        // 4. Get Backend folder (parent of VisionAid.Api).
         var backendFolder = Path.GetFullPath(
             Path.Combine(_environment.ContentRootPath, ".."));
 
-        // Create original images folder.
+        // 5. Create original images folder.
         var uploadFolder = Path.Combine(
             backendFolder,
             "uploads",
@@ -51,13 +62,14 @@ public class FrameService : IFrameService
 
         Directory.CreateDirectory(uploadFolder);
 
-        // Generate timestamp-based filename.
+        // 6. Generate a unique filename.
         var capturedAt = DateTime.UtcNow;
 
         var fileName =
-            $"{capturedAt:yyyyMMdd_HHmmss_fff}{Path.GetExtension(image.FileName)}";
+            $"{capturedAt:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}" +
+            Path.GetExtension(image.FileName);
 
-        // Save original image.
+        // 7. Save original image.
         var fullPath = Path.Combine(uploadFolder, fileName);
 
         await using (var stream = new FileStream(
@@ -68,7 +80,7 @@ public class FrameService : IFrameService
             await image.CopyToAsync(stream);
         }
 
-        // Store relative path.
+        // 8. Store relative path.
         var relativePath = Path.Combine(
             "uploads",
             "frames",
@@ -109,7 +121,7 @@ public class FrameService : IFrameService
         var backendFolder = Path.GetFullPath(
             Path.Combine(_environment.ContentRootPath, ".."));
 
-        // 3. Create folders for the analysis files.
+        // 3. Create folders for analysis files.
         var analyzedImagesFolder = Path.Combine(
             backendFolder,
             "uploads",
@@ -123,8 +135,9 @@ public class FrameService : IFrameService
         Directory.CreateDirectory(analyzedImagesFolder);
         Directory.CreateDirectory(analysisFolder);
 
-        // 4. Use the original image filename as the common filename.
+        // 4. Use original image filename as common filename.
         var originalFileName = Path.GetFileName(frame.ImagePath);
+
         var fileNameWithoutExtension =
             Path.GetFileNameWithoutExtension(originalFileName);
 
@@ -142,14 +155,14 @@ public class FrameService : IFrameService
             analysisFolder,
             jsonFileName);
 
-        // 5. Open the ZIP returned by FastAPI.
+        // 5. Open ZIP returned by FastAPI.
         using var archive = new ZipArchive(
             zipStream,
             ZipArchiveMode.Read,
             leaveOpen: true);
 
-       var imageEntry = archive.GetEntry("annotated.jpg");
-var jsonEntry = archive.GetEntry("analysis.json");
+        var imageEntry = archive.GetEntry("annotated.jpg");
+        var jsonEntry = archive.GetEntry("analysis.json");
 
         if (imageEntry is null || jsonEntry is null)
         {
@@ -157,7 +170,7 @@ var jsonEntry = archive.GetEntry("analysis.json");
                 "The ZIP must contain annotated.jpg and analysis.json.");
         }
 
-        // 6. Save the annotated image.
+        // 6. Save annotated image.
         await using (var imageStream = imageEntry.Open())
         await using (var fileStream = new FileStream(
             analyzedImageFullPath,
@@ -167,7 +180,7 @@ var jsonEntry = archive.GetEntry("analysis.json");
             await imageStream.CopyToAsync(fileStream);
         }
 
-        // 7. Save the original JSON file.
+        // 7. Save original JSON file.
         await using (var jsonStream = jsonEntry.Open())
         await using (var fileStream = new FileStream(
             jsonFullPath,
@@ -177,7 +190,7 @@ var jsonEntry = archive.GetEntry("analysis.json");
             await jsonStream.CopyToAsync(fileStream);
         }
 
-        // 8. Deserialize the JSON file into our DTO.
+        // 8. Deserialize JSON into DTO.
         FrameAnalysisResultDto? analysisResult;
 
         await using (var jsonStream = new FileStream(
@@ -198,7 +211,7 @@ var jsonEntry = archive.GetEntry("analysis.json");
             throw new InvalidDataException(
                 "Could not deserialize the analysis JSON.");
 
-        // 9. Convert file paths to relative paths for the database.
+        // 9. Convert file paths to relative paths.
         var analyzedImageRelativePath = Path.Combine(
             "uploads",
             "analyzed-frames",
@@ -209,14 +222,14 @@ var jsonEntry = archive.GetEntry("analysis.json");
             "analysis",
             jsonFileName);
 
-        // 10. Save analysis results in the database.
+        // 10. Save analysis results in database.
         await SaveAnalysisToDatabaseAsync(
             frame,
             analysisResult,
             analyzedImageRelativePath,
             jsonRelativePath);
 
-        // 11. Return the generated answer for Android TTS.
+        // 11. Return generated answer for Android TTS.
         return analysisResult.Answer;
     }
 
@@ -305,4 +318,126 @@ var jsonEntry = archive.GetEntry("analysis.json");
             throw;
         }
     }
+    
+public async Task<SessionHistoryPageDto?> GetHistoryAsync(
+    int sessionId,
+    int userId,
+    int page,
+    int pageSize)
+{
+    // 1. Validate pagination.
+    if (page < 1)
+        throw new ArgumentException("Page must be at least 1.");
+
+
+    // 2. Verify that the session belongs to the user.
+    var sessionExists = await _context.StreamSessions
+        .AnyAsync(s =>
+            s.SessionId == sessionId &&
+            s.UserId == userId);
+
+    if (!sessionExists)
+        return null;
+
+    // 3. Count the original frames.
+    var totalFrames = await _context.Frames
+        .CountAsync(f => f.SessionId == sessionId);
+
+    // 4. Retrieve the requested page and eager-load analyzed frames.
+    var frames = await _context.Frames
+        .AsNoTracking()
+        .Where(f =>
+            f.SessionId == sessionId &&
+            f.Session.UserId == userId)
+        .OrderBy(f => f.CapturedAt)
+        .ThenBy(f => f.FrameId)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .Include(f => f.AnalyzedFrames)
+        .ToListAsync();
+
+    // 5. Resolve the backend directory.
+    var backendFolder = Path.GetFullPath(
+        Path.Combine(_environment.ContentRootPath, ".."));
+
+    var history = new List<FrameHistoryDto>();
+
+    foreach (var frame in frames)
+{
+    if (frame.AnalyzedFrames.Count == 0)
+    {
+        history.Add(new FrameHistoryDto
+        {
+            FrameId = frame.FrameId,
+            OriginalImageName = Path.GetFileName(frame.ImagePath),
+            OriginalImagePath = frame.ImagePath,
+            CapturedAt = frame.CapturedAt
+        });
+
+        continue;
+    }
+
+    foreach (var analyzedFrame in frame.AnalyzedFrames)
+    {
+        // Read JSON for Question, Answer and dimensions.
+        var jsonFullPath = Path.GetFullPath(
+            Path.Combine(
+                backendFolder,
+                analyzedFrame.JsonFilePath));
+
+        FrameAnalysisResultDto? analysisResult;
+
+        await using (var jsonStream = new FileStream(
+            jsonFullPath,
+            FileMode.Open,
+            FileAccess.Read))
+        {
+            analysisResult =
+                await JsonSerializer.DeserializeAsync<FrameAnalysisResultDto>(
+                    jsonStream,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+        }
+
+        if (analysisResult is null)
+            throw new InvalidDataException(
+                $"Could not deserialize analysis for frame {frame.FrameId}.");
+
+        history.Add(new FrameHistoryDto
+        {
+            FrameId = frame.FrameId,
+
+            // Database
+            OriginalImageName = Path.GetFileName(frame.ImagePath),
+            OriginalImagePath = frame.ImagePath,
+            CapturedAt = frame.CapturedAt,
+
+            // Database
+            AnalyzedFrameId = analyzedFrame.AnalyzedFrameId,
+            AnalyzedImagePath = analyzedFrame.AnalyzedImagePath,
+            AnalyzedAt = analyzedFrame.AnalyzedAt,
+
+            // JSON
+            ImageWidth = analysisResult.ImageWidth,
+            ImageHeight = analysisResult.ImageHeight,
+            Question = analysisResult.Question,
+            Answer = analysisResult.Answer
+        });
+    }
+}
+    // 9. Return paginated history.
+    return new SessionHistoryPageDto
+    {
+        Frames = history,
+        Page = page,
+        PageSize = pageSize,
+        TotalFrames = totalFrames,
+        TotalPages = (int)Math.Ceiling(
+            (double)totalFrames / pageSize)
+    };
+}
+
+    
 }

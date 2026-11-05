@@ -1,11 +1,13 @@
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VisionAid.Api.DTOs.Users;
 using VisionAid.Api.Services.Interfaces;
 
 namespace VisionAid.Api.Controllers;
-
+[Authorize]
 [ApiController]
+
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
