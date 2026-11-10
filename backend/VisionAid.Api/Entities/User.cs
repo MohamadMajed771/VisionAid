@@ -14,4 +14,7 @@ public class User
 
     public ICollection<StreamSession> StreamSessions { get; set; }
         = new List<StreamSession>();
+
+    public ICollection<Admin> Admins { get; set; }
+        = new List<Admin>();
 }

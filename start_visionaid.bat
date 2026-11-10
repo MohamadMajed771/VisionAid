@@ -10,7 +10,7 @@ REM ========================================
 REM Python environments
 REM ========================================
 
-set "MAIN_PYTHON=C:\Users\96170\AppData\Local\Programs\Python\Python311\python.exe"
+set "MAIN_PYTHON=C:\Users\HP\anaconda3\python.exe"
 set "OCR_PYTHON=%~dp0ai-models\ocr-env\Scripts\python.exe"
 
 REM ========================================

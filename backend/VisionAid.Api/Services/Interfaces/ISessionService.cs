@@ -15,5 +15,7 @@ public interface ISessionService
 
     Task<bool> EndAsync(int sessionId, int userId);
 
-    
+    Task<List<SessionResponseDto>?> GetSessionsForAdminAsync(
+        int adminId,
+        int userId);
 }

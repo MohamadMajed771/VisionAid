@@ -22,6 +22,7 @@ var jwtIssuer = builder.Configuration["Jwt:Issuer"];
 var jwtAudience = builder.Configuration["Jwt:Audience"];
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IPasswordHasher<Admin>, PasswordHasher<Admin>>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -56,6 +57,7 @@ builder.Services.AddHttpClient<IAnalysisService, AnalysisService>(client =>
     builder.Services.AddScoped<IFrameService, FrameService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -89,6 +91,13 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    await DevelopmentDataSeeder.SeedAsync(
+        services.GetRequiredService<AppDbContext>(),
+        services.GetRequiredService<IPasswordHasher<User>>(),
+        services.GetRequiredService<IPasswordHasher<Admin>>());
+
     app.UseSwagger();
     app.UseSwaggerUI();
 }

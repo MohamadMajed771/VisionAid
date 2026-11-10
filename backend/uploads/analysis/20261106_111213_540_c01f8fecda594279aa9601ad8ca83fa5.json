@@ -1,5 +1,5 @@
 {
-  "image": "20261101_135911_654.jpg",
+  "image": "20261106_111213_540_c01f8fecda594279aa9601ad8ca83fa5.jpg",
   "imageWidth": 553,
   "imageHeight": 612,
   "depthModel": "UniDepth V2 Small",
@@ -28,6 +28,6 @@
       ]
     }
   ],
-  "question": "Describe what is in front of me.",
-  "answer": null
+  "question": "What is in front of me",
+  "answer": "There's a stop sign about 4.4 meters in front of you."
 }

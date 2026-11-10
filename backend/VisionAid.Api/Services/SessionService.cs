@@ -126,4 +126,25 @@ public async Task<List<SessionResponseDto>> GetEndedAsync(int userId)
         .Select(MapToResponse)
         .ToList();
 }
+
+    public async Task<List<SessionResponseDto>?> GetSessionsForAdminAsync(
+        int adminId,
+        int userId)
+    {
+        var user = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.UserId == userId &&
+                u.Admins.Any(a => a.AdminId == adminId))
+            .Include(u => u.StreamSessions)
+            .FirstOrDefaultAsync();
+
+        if (user is null)
+            return null;
+
+        return user.StreamSessions
+            .OrderByDescending(session => session.StartedAt)
+            .Select(MapToResponse)
+            .ToList();
+    }
 }

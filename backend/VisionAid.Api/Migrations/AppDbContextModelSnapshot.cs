@@ -19,6 +19,88 @@ namespace VisionAid.Api.Migrations
                 .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("AdminUser", b =>
+                {
+                    b.Property<int>("AdminsAdminId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UsersUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AdminsAdminId", "UsersUserId");
+
+                    b.HasIndex("UsersUserId");
+
+                    b.ToTable("AdminUser");
+                });
+
+            modelBuilder.Entity("VisionAid.Api.Models.Admin", b =>
+                {
+                    b.Property<int>("AdminId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("AdminId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("ADMINS", (string)null);
+                });
+
+            modelBuilder.Entity("VisionAid.Api.Models.AdminAccessRequest", b =>
+                {
+                    b.Property<int>("AdminAccessRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("AdminId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AdminAccessRequestId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("AdminId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ADMIN_ACCESS_REQUESTS", (string)null);
+                });
+
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>
                 {
                     b.Property<int>("AnalyzedFrameId")
@@ -257,6 +339,40 @@ namespace VisionAid.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("USERS", (string)null);
+                });
+
+            modelBuilder.Entity("AdminUser", b =>
+                {
+                    b.HasOne("VisionAid.Api.Models.Admin", null)
+                        .WithMany()
+                        .HasForeignKey("AdminsAdminId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("VisionAid.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UsersUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VisionAid.Api.Models.AdminAccessRequest", b =>
+                {
+                    b.HasOne("VisionAid.Api.Models.Admin", "Admin")
+                        .WithMany()
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("VisionAid.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Admin");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>

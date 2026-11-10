@@ -3438,11 +3438,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\visionaid.api\\VisionAid.Api.csproj",
+      "projectUniqueName": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
       "projectName": "VisionAid.Api",
-      "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\visionaid.api\\VisionAid.Api.csproj",
+      "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
       "packagesPath": "C:\\Users\\HP\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\visionaid.api\\obj\\",
+      "outputPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

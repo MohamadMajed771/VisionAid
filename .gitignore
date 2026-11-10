@@ -82,3 +82,4 @@ ai-models/ocr-env/
 # Temporary files
 *.tmp
 *.log
+start_visionaid.bat
