@@ -83,3 +83,12 @@ ai-models/ocr-env/
 *.tmp
 *.log
 start_visionaid.bat
+
+
+# Local Piper and Kokoro environments
+ai-models/piper-env/
+ai-models/tts-env/
+
+# Other downloaded model/source folders
+ai-models/rtdetr-v2/
+ai-models/unidepth-source/

@@ -1,20 +1,19 @@
+
 import io
 import json
-import zipfile
-
-from PIL import Image
-
-from fastapi.responses import StreamingResponse
 import os
 import tempfile
-from fastapi import Form
 import traceback
+import zipfile
 
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from PIL import Image
+
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 
 from vision_analyzer import (
     analyze_image,
@@ -32,6 +31,12 @@ from llama32_response_generator import (
     generate_answer
 )
 
+from piper_tts_service import (
+    load_tts_models,
+    warmup_tts_models,
+    synthesize_speech
+)
+
 
 # ------------------------------------
 # Configuration
@@ -39,6 +44,8 @@ from llama32_response_generator import (
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
 MAX_AUDIO_SIZE = 20 * 1024 * 1024
+
+SUPPORTED_LANGUAGES = {"en", "fr"}
 
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",
@@ -83,8 +90,15 @@ async def lifespan(app: FastAPI):
     # Preload Llama 3.2 through Ollama
     await run_in_threadpool(load_llama)
 
-    
-    # Warm up image analysis models automatically
+    # Load Piper English and French voices once
+    print("\nLoading Piper TTS models...")
+    await run_in_threadpool(load_tts_models)
+
+    # Warm up Piper voices
+    print("\nWarming up Piper TTS models...")
+    await run_in_threadpool(warmup_tts_models)
+
+    # Warm up image analysis models
     print("\nWarming up VisionAid image models...")
 
     warmup_path = None
@@ -96,7 +110,6 @@ async def lifespan(app: FastAPI):
         ) as temp_file:
             warmup_path = temp_file.name
 
-        # Generate a temporary RGB image
         Image.new(
             "RGB",
             (224, 224),
@@ -114,7 +127,7 @@ async def lifespan(app: FastAPI):
         if warmup_path and os.path.exists(warmup_path):
             os.remove(warmup_path)
 
-        # Warm up Llama 3.2
+    # Warm up Llama 3.2
     print("\nWarming up Llama 3.2...")
 
     llm_result = await run_in_threadpool(
@@ -145,7 +158,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="VisionAid API",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan
 )
 
@@ -204,16 +217,13 @@ async def analyze_uploaded_image(
         )
 
     suffix = ALLOWED_IMAGE_TYPES[file.content_type]
-
     temporary_path = None
 
     try:
-
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=suffix
         ) as temp_file:
-
             temp_file.write(image_bytes)
             temporary_path = Path(temp_file.name)
 
@@ -225,7 +235,6 @@ async def analyze_uploaded_image(
         return combined_result
 
     except Exception as e:
-
         print("Image analysis error:", e)
         traceback.print_exc()
 
@@ -235,7 +244,6 @@ async def analyze_uploaded_image(
         )
 
     finally:
-
         await file.close()
 
         if temporary_path is not None:
@@ -245,11 +253,28 @@ async def analyze_uploaded_image(
                 pass
 
 
+# ------------------------------------
+# Analyze frame for ASP.NET backend
+# Object Detection + Depth + OCR
+# + Llama 3.2 + Piper TTS
+# ------------------------------------
+
 @app.post("/analyze")
 async def analyze_frame_for_backend(
     image: UploadFile = File(...),
-    question: str | None = Form(None)
+    question: str | None = Form(None),
+    language: str = Form("en")
 ):
+
+    # Validate selected language
+    language = language.strip().lower()
+
+    if language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail="Supported languages are 'en' and 'fr'."
+        )
+
     # Validate image format
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -291,68 +316,125 @@ async def analyze_frame_for_backend(
             )
         )
 
-        # Add the user's question to the analysis JSON
-        # Add the user's question to the analysis JSON
+        # Preserve the original question and answer
         backend_result["question"] = question
         backend_result["answer"] = None
+
+        # Record the selected language
+        backend_result["language"] = language
+
+        # Audio is generated only when an answer exists
+        answer_audio = None
 
         # Generate an answer only when a question is provided
         if question and question.strip():
 
             print("\nGenerating VisionAid answer with Llama 3.2...")
 
+            # Preserve the user's original question
+            llm_question = question.strip()
+
+            # Request an answer in the selected language
+            if language == "fr":
+                llm_question = (
+                    "Réponds uniquement en français. "
+                    "Utilise des phrases courtes, claires et naturelles. "
+                    "Base ta réponse uniquement sur les objets détectés "
+                    "et les résultats OCR fournis. "
+                    "N'invente aucun objet ni aucune information. "
+                    "Question de l'utilisateur : "
+                    + question.strip()
+                )
+
+            else:
+                llm_question = (
+                    "Answer only in English. "
+                    "Use short, clear and natural sentences. "
+                    "Base your answer only on the detected objects "
+                    "and OCR results provided. "
+                    "Do not invent objects or information. "
+                    "User question: "
+                    + question.strip()
+                )
+
             llm_result = await run_in_threadpool(
                 generate_answer,
-                question.strip(),
+                llm_question,
                 backend_result.get("detectedObjects", []),
                 backend_result.get("ocrResults", [])
             )
 
             if llm_result is not None and llm_result.get("answer"):
+
                 backend_result["answer"] = llm_result["answer"]
 
-                print("Llama 3.2 answer:", backend_result["answer"])
+                print(
+                    "Llama 3.2 answer:",
+                    backend_result["answer"]
+                )
+
+                # Generate speech in the selected language
+                print(
+                    f"\nGenerating Piper TTS audio ({language})..."
+                )
+
+                answer_audio = await run_in_threadpool(
+                    synthesize_speech,
+                    backend_result["answer"],
+                    language
+                )
+
+                print(
+                    "Piper TTS generated answer.wav successfully."
+                )
+
+                # Print LLM performance statistics
                 print(
                     "LLM processing time:",
-                    llm_result["processing_time_seconds"],
+                    llm_result.get("processing_time_seconds"),
                     "seconds"
                 )
+
                 print(
                     "Ollama internal duration:",
-                    llm_result["ollama_total_seconds"],
+                    llm_result.get("ollama_total_seconds"),
                     "seconds"
                 )
+
                 print(
                     "LLM model loading:",
-                    llm_result["model_load_seconds"],
+                    llm_result.get("model_load_seconds"),
                     "seconds"
                 )
 
                 print(
                     "LLM prompt processing:",
-                    llm_result["prompt_processing_seconds"],
+                    llm_result.get("prompt_processing_seconds"),
                     "seconds"
                 )
 
                 print(
                     "LLM generation:",
-                    llm_result["generation_seconds"],
+                    llm_result.get("generation_seconds"),
                     "seconds"
                 )
 
                 print(
                     "LLM prompt tokens:",
-                    llm_result["prompt_tokens"]
+                    llm_result.get("prompt_tokens")
                 )
 
                 print(
                     "LLM generated tokens:",
-                    llm_result["total_tokens"]
+                    llm_result.get("total_tokens")
                 )
-            else:
-                print("WARNING: Llama 3.2 returned no usable answer.")
 
-        # Preserve the original uploaded filename
+            else:
+                print(
+                    "WARNING: Llama 3.2 returned no usable answer."
+                )
+
+        # Preserve original uploaded filename
         backend_result["image"] = (
             (image.filename or "image.jpg")
             .replace("\\", "/")
@@ -361,6 +443,7 @@ async def analyze_frame_for_backend(
 
         # Create annotated image in memory
         image_buffer = io.BytesIO()
+
         annotated_image.save(
             image_buffer,
             format="JPEG",
@@ -376,6 +459,7 @@ async def analyze_frame_for_backend(
             compression=zipfile.ZIP_DEFLATED
         ) as archive:
 
+            # JSON analysis
             archive.writestr(
                 "analysis.json",
                 json.dumps(
@@ -385,10 +469,18 @@ async def analyze_frame_for_backend(
                 )
             )
 
+            # Annotated image
             archive.writestr(
                 "annotated.jpg",
                 image_buffer.getvalue()
             )
+
+            # Spoken answer
+            if answer_audio is not None:
+                archive.writestr(
+                    "answer.wav",
+                    answer_audio
+                )
 
         zip_buffer.seek(0)
 
@@ -431,7 +523,6 @@ async def transcribe_uploaded_audio(
     file: UploadFile = File(...)
 ):
 
-    # Validate audio format
     if file.content_type not in ALLOWED_AUDIO_TYPES:
         raise HTTPException(
             status_code=400,
@@ -441,7 +532,6 @@ async def transcribe_uploaded_audio(
             )
         )
 
-    # Limit audio size to 20 MB
     audio_bytes = await file.read(MAX_AUDIO_SIZE + 1)
 
     if len(audio_bytes) > MAX_AUDIO_SIZE:
@@ -457,17 +547,13 @@ async def transcribe_uploaded_audio(
         )
 
     suffix = ALLOWED_AUDIO_TYPES[file.content_type]
-
     temporary_path = None
 
     try:
-
-        # Save audio temporarily
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=suffix
         ) as temp_file:
-
             temp_file.write(audio_bytes)
             temporary_path = Path(temp_file.name)
 
@@ -475,7 +561,6 @@ async def transcribe_uploaded_audio(
         print("Received audio for transcription")
         print("===================================")
 
-        # Run Whisper in a worker thread
         result = await run_in_threadpool(
             transcribe_audio,
             temporary_path
@@ -489,8 +574,8 @@ async def transcribe_uploaded_audio(
         }
 
     except Exception as e:
-
         print("Audio transcription error:", e)
+        traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
@@ -498,10 +583,8 @@ async def transcribe_uploaded_audio(
         )
 
     finally:
-
         await file.close()
 
-        # Delete temporary audio
         if temporary_path is not None:
             try:
                 os.remove(temporary_path)
