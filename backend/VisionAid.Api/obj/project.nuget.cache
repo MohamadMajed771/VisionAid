@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "OU+la+5N2KU=",
+  "dgSpecHash": "WS5XjImzM8c=",
   "success": true,
-  "projectFilePath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
+  "projectFilePath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\HP\\.nuget\\packages\\bouncycastle.cryptography\\2.6.2\\bouncycastle.cryptography.2.6.2.nupkg.sha512",
     "C:\\Users\\HP\\.nuget\\packages\\google.protobuf\\3.35.0\\google.protobuf.3.35.0.nupkg.sha512",
@@ -62,9 +62,9 @@
       "code": "NU1510",
       "level": "Warning",
       "message": "PackageReference Microsoft.Extensions.Identity.Core will not be pruned. This package is automatically available and does not need to be referenced explicitly. Remove the PackageReference item.",
-      "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
+      "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj",
       "warningLevel": 1,
-      "filePath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
+      "filePath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj",
       "libraryId": "Microsoft.Extensions.Identity.Core",
       "targetGraphs": [
         "net10.0"

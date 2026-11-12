@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj": {}
+    "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj": {}
   },
   "projects": {
-    "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj": {
+    "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
+        "projectUniqueName": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj",
         "projectName": "VisionAid.Api",
-        "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\VisionAid.Api.csproj",
+        "projectPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\VisionAid.Api.csproj",
         "packagesPath": "C:\\Users\\HP\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.Api\\obj\\",
+        "outputPath": "C:\\Users\\HP\\Desktop\\VisionAid\\backend\\VisionAid.api\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

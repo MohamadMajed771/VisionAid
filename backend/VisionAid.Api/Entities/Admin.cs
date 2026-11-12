@@ -1,3 +1,4 @@
+
 namespace VisionAid.Api.Models;
 
 public class Admin
@@ -9,6 +10,6 @@ public class Admin
     public string PasswordHash { get; set; } = null!;
     public DateTime CreatedAt { get; set; }
 
-    public ICollection<User> Users { get; set; }
-        = new List<User>();
+    public ICollection<AdminAccessRequest> AccessRequests { get; set; }
+        = new List<AdminAccessRequest>();
 }

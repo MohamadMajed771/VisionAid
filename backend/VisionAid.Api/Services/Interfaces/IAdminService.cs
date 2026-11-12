@@ -10,16 +10,16 @@ public interface IAdminService
 
     Task<AdminResponseDto?> GetByIdAsync(int adminId);
 
-    Task<IReadOnlyList<AdminUserResponseDto>> GetUsersAsync(int adminId);
+    Task<List<AdminUserResponseDto>> GetUsersAsync(int adminId);
 
     Task<AccessRequestResponseDto> CreateAccessRequestAsync(
         int adminId,
         CreateAccessRequestDto request);
 
-    Task<IReadOnlyList<AccessRequestResponseDto>> GetAccessRequestsAsync(
+    Task<List<AccessRequestResponseDto>> GetAccessRequestsAsync(
         int adminId);
 
-    Task<IReadOnlyList<AccessRequestResponseDto>> GetPendingRequestsAsync(
+    Task<List<AccessRequestResponseDto>> GetPendingRequestsAsync(
         int userId);
 
     Task<bool?> RespondToAccessRequestAsync(

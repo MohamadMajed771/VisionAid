@@ -1,3 +1,4 @@
+
 namespace VisionAid.Api.Models;
 
 public class User
@@ -7,6 +8,7 @@ public class User
     public string Name { get; set; } = null!;
     public string Email { get; set; } = null!;
     public string? PasswordHash { get; set; }
+
     // Language used for questions and spoken answers.
     public string PreferredLanguage { get; set; } = "en";
 
@@ -15,6 +17,6 @@ public class User
     public ICollection<StreamSession> StreamSessions { get; set; }
         = new List<StreamSession>();
 
-    public ICollection<Admin> Admins { get; set; }
-        = new List<Admin>();
+    public ICollection<AdminAccessRequest> AccessRequests { get; set; }
+        = new List<AdminAccessRequest>();
 }

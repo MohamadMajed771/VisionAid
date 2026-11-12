@@ -1,0 +1,62 @@
+{
+  "image": "20261112_095446_096_e8e93a463e7345099aa97a6039a794f1.JPG",
+  "imageWidth": 845,
+  "imageHeight": 634,
+  "depthModel": "UniDepth V2 Small",
+  "depthPrecision": "torch.float32",
+  "detectedObjects": [
+    {
+      "label": "person",
+      "confidence": 0.77,
+      "depth": 79.53,
+      "depthUnit": "meters",
+      "x1": 0.64,
+      "y1": 397.79,
+      "x2": 50.59,
+      "y2": 494.06
+    },
+    {
+      "label": "person",
+      "confidence": 0.69,
+      "depth": 58.1,
+      "depthUnit": "meters",
+      "x1": 133.07,
+      "y1": 579.77,
+      "x2": 167.06,
+      "y2": 634.27
+    },
+    {
+      "label": "person",
+      "confidence": 0.63,
+      "depth": 57.11,
+      "depthUnit": "meters",
+      "x1": 24.83,
+      "y1": 583.7,
+      "x2": 62.17,
+      "y2": 633.83
+    },
+    {
+      "label": "person",
+      "confidence": 0.57,
+      "depth": 57.25,
+      "depthUnit": "meters",
+      "x1": 168.05,
+      "y1": 611.0,
+      "x2": 199.22,
+      "y2": 633.85
+    },
+    {
+      "label": "person",
+      "confidence": 0.56,
+      "depth": 57.63,
+      "depthUnit": "meters",
+      "x1": 0.33,
+      "y1": 532.82,
+      "x2": 32.68,
+      "y2": 588.67
+    }
+  ],
+  "ocrResults": [],
+  "question": "Whats on the right",
+  "answer": "There is a person standing about 57.1 meters to the right."
+}

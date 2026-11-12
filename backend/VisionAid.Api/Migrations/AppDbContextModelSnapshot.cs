@@ -19,21 +19,6 @@ namespace VisionAid.Api.Migrations
                 .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
-            modelBuilder.Entity("AdminUser", b =>
-                {
-                    b.Property<int>("AdminsAdminId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UsersUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("AdminsAdminId", "UsersUserId");
-
-                    b.HasIndex("UsersUserId");
-
-                    b.ToTable("AdminUser");
-                });
-
             modelBuilder.Entity("VisionAid.Api.Models.Admin", b =>
                 {
                     b.Property<int>("AdminId")
@@ -341,31 +326,16 @@ namespace VisionAid.Api.Migrations
                     b.ToTable("USERS", (string)null);
                 });
 
-            modelBuilder.Entity("AdminUser", b =>
-                {
-                    b.HasOne("VisionAid.Api.Models.Admin", null)
-                        .WithMany()
-                        .HasForeignKey("AdminsAdminId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("VisionAid.Api.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("UsersUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("VisionAid.Api.Models.AdminAccessRequest", b =>
                 {
                     b.HasOne("VisionAid.Api.Models.Admin", "Admin")
-                        .WithMany()
+                        .WithMany("AccessRequests")
                         .HasForeignKey("AdminId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("VisionAid.Api.Models.User", "User")
-                        .WithMany()
+                        .WithMany("AccessRequests")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -460,6 +430,11 @@ namespace VisionAid.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("VisionAid.Api.Models.Admin", b =>
+                {
+                    b.Navigation("AccessRequests");
+                });
+
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>
                 {
                     b.Navigation("Answers");
@@ -488,6 +463,8 @@ namespace VisionAid.Api.Migrations
 
             modelBuilder.Entity("VisionAid.Api.Models.User", b =>
                 {
+                    b.Navigation("AccessRequests");
+
                     b.Navigation("StreamSessions");
                 });
 #pragma warning restore 612, 618

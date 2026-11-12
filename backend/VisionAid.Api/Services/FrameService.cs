@@ -344,27 +344,31 @@ private async Task<SessionHistoryPageDto?> GetHistoryForAdminCoreAsync(
     // 1. Validate pagination.
     if (page < 1)
         throw new ArgumentException("Page must be at least 1.");
-    if (pageSize < 1 || pageSize > 100)
-        throw new ArgumentException("Page size must be between 1 and 100.");
 
-
-   var sessionExists = await _context.StreamSessions
+var sessionExists = await _context.StreamSessions
     .AsNoTracking()
     .AnyAsync(s =>
         s.SessionId == sessionId &&
         s.UserId == userId &&
-        s.User.Admins.Any(a => a.AdminId == adminId));
-        
-    if (!sessionExists)
-        return null;
+        _context.AdminAccessRequests.Any(r =>
+            r.AdminId == adminId &&
+            r.UserId == userId &&
+            r.Status == "Accepted"));
 
+if (!sessionExists)
+    return null;
+    
     // 3. Count the original frames.
     var frameQuery = _context.Frames
-        .AsNoTracking()
-        .Where(f =>
-            f.SessionId == sessionId &&
-            f.Session.UserId == userId).Where(f =>
-        f.Session.User.Admins.Any(a => a.AdminId == adminId));
+    .AsNoTracking()
+    .Where(f =>
+        f.SessionId == sessionId &&
+        f.Session.UserId == userId &&
+        _context.AdminAccessRequests.Any(r =>
+            r.AdminId == adminId &&
+            r.UserId == userId &&
+            r.Status == "Accepted"));
+
 
     var totalFrames = await frameQuery.CountAsync();
 
@@ -376,7 +380,6 @@ private async Task<SessionHistoryPageDto?> GetHistoryForAdminCoreAsync(
         .Take(pageSize)
         .Include(f => f.AnalyzedFrames)
         .ToListAsync();
-
     // 5. Resolve the backend directory.
     var backendFolder = Path.GetFullPath(
         Path.Combine(_environment.ContentRootPath, ".."));
