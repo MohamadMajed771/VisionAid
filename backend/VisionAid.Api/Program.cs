@@ -25,7 +25,7 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IPasswordHasher<Admin>, PasswordHasher<Admin>>();
 
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme) //send the JWT token in the Authorization header with the Bearer scheme
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -36,13 +36,13 @@ builder.Services
             ValidateAudience = true,
             ValidAudience = jwtAudience,
 
-            ValidateIssuerSigningKey = true,
+            ValidateIssuerSigningKey = true, 
       IssuerSigningKey = new SymmetricSecurityKey(
     Convert.FromBase64String(jwtKey)
 ),
 
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ClockSkew = TimeSpan.FromSeconds(30) //here we dont really need it bc system is centralized
         };
     });
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -91,7 +91,7 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
+    using var scope = app.Services.CreateScope(); // createt seperate scope for seeding, seperate from the main app scope
     var services = scope.ServiceProvider;
     await DevelopmentDataSeeder.SeedAsync(
         services.GetRequiredService<AppDbContext>(),

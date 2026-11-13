@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using VisionAid.Api.Models;
@@ -22,8 +23,8 @@ public static class DevelopmentDataSeeder
         IPasswordHasher<User> userPasswordHasher,
         IPasswordHasher<Admin> adminPasswordHasher)
     {
+        // 1. Find or create the demo Admin.
         var admin = await context.Admins
-            .Include(a => a.Users)
             .FirstOrDefaultAsync(a => a.Email == AdminEmail);
 
         if (admin is null)
@@ -34,16 +35,20 @@ public static class DevelopmentDataSeeder
                 Email = AdminEmail,
                 CreatedAt = DateTime.UtcNow
             };
+
             admin.PasswordHash = adminPasswordHasher.HashPassword(
                 admin,
                 AdminPassword);
+
             context.Admins.Add(admin);
+
+            await context.SaveChangesAsync();
         }
 
+        // 2. Find or create each demo User.
         foreach (var (name, email) in SeedUsers)
         {
             var user = await context.Users
-                .Include(u => u.Admins)
                 .Include(u => u.StreamSessions)
                 .FirstOrDefaultAsync(u => u.Email == email);
 
@@ -56,36 +61,43 @@ public static class DevelopmentDataSeeder
                     PreferredLanguage = "en",
                     CreatedAt = DateTime.UtcNow
                 };
+
                 user.PasswordHash = userPasswordHasher.HashPassword(
                     user,
                     "User123!");
+
                 context.Users.Add(user);
+
+                await context.SaveChangesAsync();
             }
 
+            // 3. Find or create the Admin-User access request.
             var accessRequest = await context.AdminAccessRequests
                 .FirstOrDefaultAsync(r =>
-                    r.Admin.Email == AdminEmail &&
-                    r.User.Email == email);
+                    r.AdminId == admin.AdminId &&
+                    r.UserId == user.UserId);
 
             if (accessRequest is null)
             {
                 accessRequest = new AdminAccessRequest
                 {
-                    Admin = admin,
-                    User = user,
+                    AdminId = admin.AdminId,
+                    UserId = user.UserId,
                     Status = "Accepted",
                     RequestedAt = DateTime.UtcNow,
                     RespondedAt = DateTime.UtcNow
                 };
+
                 context.AdminAccessRequests.Add(accessRequest);
             }
-
-            if (accessRequest.Status == "Accepted" &&
-                !admin.Users.Any(u => u.Email == email))
+            else if (accessRequest.Status != "Accepted")
             {
-                admin.Users.Add(user);
+                // Ensure the demo Admin has access to demo Users.
+                accessRequest.Status = "Accepted";
+                accessRequest.RespondedAt = DateTime.UtcNow;
             }
 
+            // 4. Create a demo session if the User has none.
             if (!user.StreamSessions.Any())
             {
                 user.StreamSessions.Add(new StreamSession
@@ -96,6 +108,7 @@ public static class DevelopmentDataSeeder
             }
         }
 
+        // 5. Save all remaining changes.
         await context.SaveChangesAsync();
     }
 }

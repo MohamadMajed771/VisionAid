@@ -85,32 +85,41 @@ public class AdminService : IAdminService
         return CreateAuthResponse(admin);
     }
 
-    public async Task<AdminResponseDto?> GetByIdAsync(int adminId)
-    {
-        var admin = await _context.Admins
-            .AsNoTracking()
-            .Include(a => a.Users)
-                .ThenInclude(u => u.StreamSessions)
-            .FirstOrDefaultAsync(a => a.AdminId == adminId);
+   public async Task<AdminResponseDto?> GetByIdAsync(int adminId)
+{
+    var admin = await _context.Admins
+        .AsNoTracking()
+        .FirstOrDefaultAsync(a => a.AdminId == adminId);
 
-        return admin is null ? null : MapToResponse(admin);
-    }
+    if (admin is null)
+        return null;
 
-    public async Task<IReadOnlyList<AdminUserResponseDto>> GetUsersAsync(
-        int adminId)
-    {
-        var admin = await _context.Admins
-            .AsNoTracking()
-            .Include(a => a.Users)
-                .ThenInclude(u => u.StreamSessions)
-            .FirstOrDefaultAsync(a => a.AdminId == adminId);
+    var users = await GetUsersAsync(adminId);
 
-        return admin?.Users
-            .OrderBy(u => u.UserId)
-            .Select(MapToUserResponse)
-            .ToList() ?? new List<AdminUserResponseDto>();
-    }
+    return MapToResponse(admin, users);
+}
+public async Task<List<AdminUserResponseDto>> GetUsersAsync(
+    int adminId)
+{
+    var users = await _context.Users
+        .AsNoTracking()
+        .Where(u =>
+            _context.AdminAccessRequests.Any(r =>
+                r.AdminId == adminId &&
+                r.UserId == u.UserId &&
+                r.Status == "Accepted"))
+        .ToListAsync();
 
+    return users
+        .OrderBy(u => u.UserId)
+        .Select(u => new AdminUserResponseDto
+        {
+            UserId = u.UserId,
+            Name = u.Name,
+            Email = u.Email
+        })
+        .ToList();
+} 
     public async Task<AccessRequestResponseDto> CreateAccessRequestAsync(
         int adminId,
         CreateAccessRequestDto request)
@@ -122,10 +131,11 @@ public class AdminService : IAdminService
         if (user is null)
             throw new KeyNotFoundException("No user was found with this email.");
 
-        var alreadyLinked = await _context.Users
-            .AnyAsync(u => u.UserId == user.UserId &&
-                u.Admins.Any(a => a.AdminId == adminId));
-
+var alreadyLinked = await _context.AdminAccessRequests
+    .AnyAsync(r =>
+        r.AdminId == adminId &&
+        r.UserId == user.UserId &&
+        r.Status == "Accepted");
         if (alreadyLinked)
             throw new InvalidOperationException(
                 "This user has already granted access to this admin.");
@@ -164,7 +174,7 @@ public class AdminService : IAdminService
         return MapToResponse(accessRequest);
     }
 
-    public async Task<IReadOnlyList<AccessRequestResponseDto>> GetAccessRequestsAsync(
+    public async Task<List<AccessRequestResponseDto>> GetAccessRequestsAsync(
         int adminId)
     {
         var requests = await _context.AdminAccessRequests
@@ -178,7 +188,7 @@ public class AdminService : IAdminService
         return requests.Select(MapToResponse).ToList();
     }
 
-    public async Task<IReadOnlyList<AccessRequestResponseDto>> GetPendingRequestsAsync(
+    public async Task<List<AccessRequestResponseDto>> GetPendingRequestsAsync(
         int userId)
     {
         var requests = await _context.AdminAccessRequests
@@ -191,77 +201,47 @@ public class AdminService : IAdminService
 
         return requests.Select(MapToResponse).ToList();
     }
+public async Task<bool?> RespondToAccessRequestAsync(
+    int requestId,
+    int userId,
+    bool accept)
+{
+    var accessRequest = await _context.AdminAccessRequests
+        .FirstOrDefaultAsync(r =>
+            r.AdminAccessRequestId == requestId &&
+            r.UserId == userId);
 
-    public async Task<bool?> RespondToAccessRequestAsync(
-        int requestId,
-        int userId,
-        bool accept)
-    {
-        var accessRequest = await _context.AdminAccessRequests
-            .Include(r => r.Admin)
-            .Include(r => r.User)
-            .FirstOrDefaultAsync(r =>
-                r.AdminAccessRequestId == requestId &&
-                r.UserId == userId);
+    if (accessRequest is null)
+        return null;
 
-        if (accessRequest is null)
-            return null;
+    if (accessRequest.Status != "Pending")
+        return false;
 
-        if (accessRequest.Status != "Pending")
-            return false;
+    accessRequest.Status = accept ? "Accepted" : "Declined";
+    accessRequest.RespondedAt = DateTime.UtcNow;
 
-        if (accept)
-        {
-            var linked = await _context.Users
-                .Where(u => u.UserId == userId)
-                .SelectMany(u => u.Admins)
-                .AnyAsync(a => a.AdminId == accessRequest.AdminId);
+    await _context.SaveChangesAsync();
 
-            if (!linked)
-                accessRequest.Admin.Users.Add(accessRequest.User);
+    return true;
+}
+   public async Task<bool> RevokeAdminAsync(int userId, int adminId)
+{
+    var acceptedRequest = await _context.AdminAccessRequests
+        .FirstOrDefaultAsync(r =>
+            r.UserId == userId &&
+            r.AdminId == adminId &&
+            r.Status == "Accepted");
 
-            accessRequest.Status = "Accepted";
-        }
-        else
-        {
-            accessRequest.Status = "Declined";
-        }
+    if (acceptedRequest is null)
+        return false;
 
-        accessRequest.RespondedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
-        return true;
-    }
+    acceptedRequest.Status = "Revoked";
+    acceptedRequest.RespondedAt = DateTime.UtcNow;
 
-    public async Task<bool> RevokeAdminAsync(int userId, int adminId)
-    {
-        var user = await _context.Users
-            .Include(u => u.Admins)
-            .FirstOrDefaultAsync(u => u.UserId == userId);
+    await _context.SaveChangesAsync();
 
-        if (user is null)
-            return false;
-
-        var admin = user.Admins.FirstOrDefault(a => a.AdminId == adminId);
-        if (admin is null)
-            return false;
-
-        user.Admins.Remove(admin);
-
-        var acceptedRequest = await _context.AdminAccessRequests
-            .FirstOrDefaultAsync(r =>
-                r.UserId == userId &&
-                r.AdminId == adminId &&
-                r.Status == "Accepted");
-        if (acceptedRequest is not null)
-        {
-            acceptedRequest.Status = "Revoked";
-            acceptedRequest.RespondedAt = DateTime.UtcNow;
-        }
-
-        await _context.SaveChangesAsync();
-        return true;
-    }
-
+    return true;
+}
     private AdminAuthResponseDto CreateAuthResponse(Admin admin)
     {
         var expiresAt = DateTime.UtcNow.AddMinutes(
@@ -295,25 +275,20 @@ public class AdminService : IAdminService
             ExpiresAt = expiresAt
         };
     }
-
-    private static AdminResponseDto MapToResponse(Admin admin)
+private static AdminResponseDto MapToResponse(
+    Admin admin,
+    List<AdminUserResponseDto> users)
+{
+    return new AdminResponseDto
     {
-        var users = admin.Users
-            .OrderBy(user => user.UserId)
-            .Select(MapToUserResponse)
-            .ToList();
-
-        return new AdminResponseDto
-        {
-            AdminId = admin.AdminId,
-            Name = admin.Name,
-            Email = admin.Email,
-            CreatedAt = new DateTimeOffset(
-                DateTime.SpecifyKind(admin.CreatedAt, DateTimeKind.Utc)),
-            Users = users
-        };
-    }
-
+        AdminId = admin.AdminId,
+        Name = admin.Name,
+        Email = admin.Email,
+        CreatedAt = new DateTimeOffset(
+            DateTime.SpecifyKind(admin.CreatedAt, DateTimeKind.Utc)),
+        Users = users
+    };
+}
     private static AccessRequestResponseDto MapToResponse(
         AdminAccessRequest request)
     {

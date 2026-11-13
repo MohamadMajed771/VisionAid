@@ -61,11 +61,9 @@ public class AnalysisService : IAnalysisService
             contentType = "application/octet-stream";
         }
 
-        imageContent.Headers.ContentType =
-            new MediaTypeHeaderValue(contentType);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
 
-        form.Add(
-            imageContent,
+        form.Add(imageContent,
             "image",
             Path.GetFileName(fullImagePath));
             if (!string.IsNullOrWhiteSpace(question))

@@ -1,5 +1,5 @@
 {
-  "image": "20261106_153054_112_1bf201aa244a404da1df30ac73d0acb7.jpg",
+  "image": "20261112_095753_684_52136a5aeac94718883b1ccf7f2751c0.jpg",
   "imageWidth": 553,
   "imageHeight": 612,
   "depthModel": "UniDepth V2 Small",
@@ -28,6 +28,6 @@
       ]
     }
   ],
-  "question": "Whats the nearest thing?",
-  "answer": "The nearest thing is a stop sign, about 4.4 meters away."
+  "question": "Whats in front of me",
+  "answer": "There's a stop sign about 4.4 meters in front of you."
 }

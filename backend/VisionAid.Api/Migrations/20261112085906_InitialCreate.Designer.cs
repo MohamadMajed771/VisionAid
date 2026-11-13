@@ -11,8 +11,8 @@ using VisionAid.Api.Data;
 namespace VisionAid.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261026092732_RequireFrameMinDepth")]
-    partial class RequireFrameMinDepth
+    [Migration("20261112085906_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -21,6 +21,73 @@ namespace VisionAid.Api.Migrations
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
+
+            modelBuilder.Entity("VisionAid.Api.Models.Admin", b =>
+                {
+                    b.Property<int>("AdminId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("AdminId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("ADMINS", (string)null);
+                });
+
+            modelBuilder.Entity("VisionAid.Api.Models.AdminAccessRequest", b =>
+                {
+                    b.Property<int>("AdminAccessRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("AdminId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AdminAccessRequestId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("AdminId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ADMIN_ACCESS_REQUESTS", (string)null);
+                });
 
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>
                 {
@@ -90,18 +157,6 @@ namespace VisionAid.Api.Migrations
                     b.Property<int>("AnalyzedFrameId")
                         .HasColumnType("int");
 
-                    b.Property<float>("BoundingBoxHeight")
-                        .HasColumnType("float");
-
-                    b.Property<float>("BoundingBoxWidth")
-                        .HasColumnType("float");
-
-                    b.Property<float>("BoundingBoxX")
-                        .HasColumnType("float");
-
-                    b.Property<float>("BoundingBoxY")
-                        .HasColumnType("float");
-
                     b.Property<float>("Confidence")
                         .HasColumnType("float");
 
@@ -112,6 +167,18 @@ namespace VisionAid.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
+
+                    b.Property<float>("X1")
+                        .HasColumnType("float");
+
+                    b.Property<float>("X2")
+                        .HasColumnType("float");
+
+                    b.Property<float>("Y1")
+                        .HasColumnType("float");
+
+                    b.Property<float>("Y2")
+                        .HasColumnType("float");
 
                     b.HasKey("DetectedObjectId");
 
@@ -137,9 +204,6 @@ namespace VisionAid.Api.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("varchar(1024)");
 
-                    b.Property<double>("MinDepth")
-                        .HasColumnType("double");
-
                     b.Property<int>("SessionId")
                         .HasColumnType("int");
 
@@ -159,7 +223,7 @@ namespace VisionAid.Api.Migrations
                     b.Property<int>("AnalyzedFrameId")
                         .HasColumnType("int");
 
-                    b.Property<float?>("Confidence")
+                    b.Property<float>("Confidence")
                         .HasColumnType("float");
 
                     b.Property<string>("ExtractedText")
@@ -246,6 +310,10 @@ namespace VisionAid.Api.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
 
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -259,6 +327,25 @@ namespace VisionAid.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("USERS", (string)null);
+                });
+
+            modelBuilder.Entity("VisionAid.Api.Models.AdminAccessRequest", b =>
+                {
+                    b.HasOne("VisionAid.Api.Models.Admin", "Admin")
+                        .WithMany("AccessRequests")
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("VisionAid.Api.Models.User", "User")
+                        .WithMany("AccessRequests")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Admin");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>
@@ -346,6 +433,11 @@ namespace VisionAid.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("VisionAid.Api.Models.Admin", b =>
+                {
+                    b.Navigation("AccessRequests");
+                });
+
             modelBuilder.Entity("VisionAid.Api.Models.AnalyzedFrame", b =>
                 {
                     b.Navigation("Answers");
@@ -374,6 +466,8 @@ namespace VisionAid.Api.Migrations
 
             modelBuilder.Entity("VisionAid.Api.Models.User", b =>
                 {
+                    b.Navigation("AccessRequests");
+
                     b.Navigation("StreamSessions");
                 });
 #pragma warning restore 612, 618

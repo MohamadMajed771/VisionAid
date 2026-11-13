@@ -1,5 +1,5 @@
 {
-  "image": "20261103_134445_897_6a39202554de4bf3951c0582664fd33c.jpg",
+  "image": "20261112_095228_452_b29e97c102b64a7cba2257f9cca5131b.jpg",
   "imageWidth": 800,
   "imageHeight": 533,
   "depthModel": "UniDepth V2 Small",
@@ -527,6 +527,6 @@
     }
   ],
   "ocrResults": [],
-  "question": null,
-  "answer": null
+  "question": "What is in front of me",
+  "answer": "There's a car, a person, and a motorbike about 10.5 meters away."
 }

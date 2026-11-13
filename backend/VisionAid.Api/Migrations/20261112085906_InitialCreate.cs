@@ -7,12 +7,29 @@ using MySql.EntityFrameworkCore.Metadata;
 namespace VisionAid.Api.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialVisionAidSchema : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterDatabase()
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "ADMINS",
+                columns: table => new
+                {
+                    AdminId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Name = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: false),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    PasswordHash = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ADMINS", x => x.AdminId);
+                })
                 .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
@@ -23,12 +40,43 @@ namespace VisionAid.Api.Migrations
                         .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     Name = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: false),
                     Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    PasswordHash = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true),
                     PreferredLanguage = table.Column<string>(type: "varchar(10)", maxLength: 10, nullable: false, defaultValue: "en"),
                     CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_USERS", x => x.UserId);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "ADMIN_ACCESS_REQUESTS",
+                columns: table => new
+                {
+                    AdminAccessRequestId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    AdminId = table.Column<int>(type: "int", nullable: false),
+                    UserId = table.Column<int>(type: "int", nullable: false),
+                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false, defaultValue: "Pending"),
+                    RequestedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    RespondedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ADMIN_ACCESS_REQUESTS", x => x.AdminAccessRequestId);
+                    table.ForeignKey(
+                        name: "FK_ADMIN_ACCESS_REQUESTS_ADMINS_AdminId",
+                        column: x => x.AdminId,
+                        principalTable: "ADMINS",
+                        principalColumn: "AdminId",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ADMIN_ACCESS_REQUESTS_USERS_UserId",
+                        column: x => x.UserId,
+                        principalTable: "USERS",
+                        principalColumn: "UserId",
+                        onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySQL:Charset", "utf8mb4");
 
@@ -41,7 +89,7 @@ namespace VisionAid.Api.Migrations
                     UserId = table.Column<int>(type: "int", nullable: false),
                     StartedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
                     EndedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    Status = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false)
+                    Status = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false, defaultValue: "Active")
                 },
                 constraints: table =>
                 {
@@ -86,8 +134,7 @@ namespace VisionAid.Api.Migrations
                         .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     SessionId = table.Column<int>(type: "int", nullable: false),
                     AskedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    QuestionText = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: false),
-                    InputType = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false)
+                    QuestionText = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -108,11 +155,8 @@ namespace VisionAid.Api.Migrations
                     AnalyzedFrameId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     FrameId = table.Column<int>(type: "int", nullable: false),
-                    AnalyzedImagePath = table.Column<string>(type: "varchar(1024)", maxLength: 1024, nullable: true),
-                    DepthMapPath = table.Column<string>(type: "varchar(1024)", maxLength: 1024, nullable: true),
-                    SceneDataJson = table.Column<string>(type: "longtext", nullable: true),
-                    ModelVersion = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    Status = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
+                    AnalyzedImagePath = table.Column<string>(type: "varchar(1024)", maxLength: 1024, nullable: false),
+                    JsonFilePath = table.Column<string>(type: "varchar(1024)", maxLength: 1024, nullable: false),
                     AnalyzedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
                 },
                 constraints: table =>
@@ -136,8 +180,7 @@ namespace VisionAid.Api.Migrations
                     QuestionId = table.Column<int>(type: "int", nullable: false),
                     AnalyzedFrameId = table.Column<int>(type: "int", nullable: false),
                     AnswerText = table.Column<string>(type: "varchar(8000)", maxLength: 8000, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    Status = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false)
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -166,11 +209,11 @@ namespace VisionAid.Api.Migrations
                     AnalyzedFrameId = table.Column<int>(type: "int", nullable: false),
                     Label = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     Confidence = table.Column<float>(type: "float", nullable: false),
-                    Depth = table.Column<float>(type: "float", nullable: true),
-                    BoundingBoxX = table.Column<float>(type: "float", nullable: false),
-                    BoundingBoxY = table.Column<float>(type: "float", nullable: false),
-                    BoundingBoxWidth = table.Column<float>(type: "float", nullable: false),
-                    BoundingBoxHeight = table.Column<float>(type: "float", nullable: false)
+                    Depth = table.Column<float>(type: "float", nullable: false),
+                    X1 = table.Column<float>(type: "float", nullable: false),
+                    Y1 = table.Column<float>(type: "float", nullable: false),
+                    X2 = table.Column<float>(type: "float", nullable: false),
+                    Y2 = table.Column<float>(type: "float", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -192,7 +235,7 @@ namespace VisionAid.Api.Migrations
                         .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     AnalyzedFrameId = table.Column<int>(type: "int", nullable: false),
                     ExtractedText = table.Column<string>(type: "varchar(8000)", maxLength: 8000, nullable: false),
-                    Confidence = table.Column<float>(type: "float", nullable: true)
+                    Confidence = table.Column<float>(type: "float", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -205,6 +248,23 @@ namespace VisionAid.Api.Migrations
                         onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ADMIN_ACCESS_REQUESTS_AdminId_UserId",
+                table: "ADMIN_ACCESS_REQUESTS",
+                columns: new[] { "AdminId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ADMIN_ACCESS_REQUESTS_UserId",
+                table: "ADMIN_ACCESS_REQUESTS",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ADMINS_Email",
+                table: "ADMINS",
+                column: "Email",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_ANALYZED_FRAMES_FrameId_AnalyzedAt",
@@ -258,6 +318,9 @@ namespace VisionAid.Api.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "ADMIN_ACCESS_REQUESTS");
+
+            migrationBuilder.DropTable(
                 name: "ANSWERS");
 
             migrationBuilder.DropTable(
@@ -265,6 +328,9 @@ namespace VisionAid.Api.Migrations
 
             migrationBuilder.DropTable(
                 name: "OCR_RESULTS");
+
+            migrationBuilder.DropTable(
+                name: "ADMINS");
 
             migrationBuilder.DropTable(
                 name: "QUESTIONS");
