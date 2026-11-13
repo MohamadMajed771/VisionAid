@@ -319,36 +319,57 @@ public class FrameService : IFrameService
         }
     }
     
-public async Task<SessionHistoryPageDto?> GetHistoryAsync(
+public async Task<SessionHistoryPageDto?> GetHistoryForAdminAsync(
+    int sessionId,
+    int userId,
+    int adminId,
+    int page,
+    int pageSize)
+{
+    return await GetHistoryForAdminCoreAsync(
+        sessionId,
+        userId,
+        page,
+        pageSize,
+        adminId);
+}
+
+private async Task<SessionHistoryPageDto?> GetHistoryForAdminCoreAsync(
     int sessionId,
     int userId,
     int page,
-    int pageSize)
+    int pageSize,
+    int adminId)
 {
     // 1. Validate pagination.
     if (page < 1)
         throw new ArgumentException("Page must be at least 1.");
+    if (pageSize < 1 || pageSize > 100)
+        throw new ArgumentException("Page size must be between 1 and 100.");
 
 
-    // 2. Verify that the session belongs to the user.
-    var sessionExists = await _context.StreamSessions
-        .AnyAsync(s =>
-            s.SessionId == sessionId &&
-            s.UserId == userId);
-
+   var sessionExists = await _context.StreamSessions
+    .AsNoTracking()
+    .AnyAsync(s =>
+        s.SessionId == sessionId &&
+        s.UserId == userId &&
+        s.User.Admins.Any(a => a.AdminId == adminId));
+        
     if (!sessionExists)
         return null;
 
     // 3. Count the original frames.
-    var totalFrames = await _context.Frames
-        .CountAsync(f => f.SessionId == sessionId);
-
-    // 4. Retrieve the requested page and eager-load analyzed frames.
-    var frames = await _context.Frames
+    var frameQuery = _context.Frames
         .AsNoTracking()
         .Where(f =>
             f.SessionId == sessionId &&
-            f.Session.UserId == userId)
+            f.Session.UserId == userId).Where(f =>
+        f.Session.User.Admins.Any(a => a.AdminId == adminId));
+
+    var totalFrames = await frameQuery.CountAsync();
+
+    // 4. Retrieve the requested page and eager-load analyzed frames.
+    var frames = await frameQuery
         .OrderBy(f => f.CapturedAt)
         .ThenBy(f => f.FrameId)
         .Skip((page - 1) * pageSize)

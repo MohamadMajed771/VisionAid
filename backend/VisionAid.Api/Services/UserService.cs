@@ -41,7 +41,7 @@ public class UserService : IUserService
         return MapToResponse(user);
     }
 
-    public async Task<UserResponseDto   ?> GetByIdAsync(int userId)
+    public async Task<UserResponseDto?> GetByIdAsync(int userId)
     {
         var user = await _context.Users
             .AsNoTracking()

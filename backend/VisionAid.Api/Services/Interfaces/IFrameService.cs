@@ -15,9 +15,10 @@ public interface IFrameService
         int frameId,
         Stream zipStream);
 
-    Task<SessionHistoryPageDto?> GetHistoryAsync(
+    Task<SessionHistoryPageDto?> GetHistoryForAdminAsync(
         int sessionId,
         int userId,
+        int adminId,
         int page,
         int pageSize);
 }

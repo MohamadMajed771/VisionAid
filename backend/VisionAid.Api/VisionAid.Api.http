@@ -4,3 +4,36 @@ GET {{VisionAid.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Create an admin
+POST {{VisionAid.Api_HostAddress}}/api/admins
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Alex Admin",
+  "email": "alex.admin@example.com"
+}
+
+### Get an admin and their users
+GET {{VisionAid.Api_HostAddress}}/api/admins/1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Get an admin's users
+GET {{VisionAid.Api_HostAddress}}/api/admins/1/users
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Get a user's admins
+GET {{VisionAid.Api_HostAddress}}/api/admins/users/1/admins
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Associate an existing user with an admin
+PUT {{VisionAid.Api_HostAddress}}/api/admins/1/users/1
+Authorization: Bearer {{token}}
+
+### Remove a user's association with an admin
+DELETE {{VisionAid.Api_HostAddress}}/api/admins/1/users/1
+Authorization: Bearer {{token}}

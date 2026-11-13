@@ -12,6 +12,8 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<Admin> Admins => Set<Admin>();
+    public DbSet<AdminAccessRequest> AdminAccessRequests => Set<AdminAccessRequest>();
     public DbSet<StreamSession> StreamSessions => Set<StreamSession>();
     public DbSet<Frame> Frames => Set<Frame>();
     public DbSet<Question> Questions => Set<Question>();
@@ -40,6 +42,43 @@ public class AppDbContext : DbContext
             entity.Property(u => u.PreferredLanguage)
                 .HasMaxLength(10)
                 .HasDefaultValue("en");
+        });
+
+        modelBuilder.Entity<Admin>(entity =>
+        {
+            entity.ToTable("ADMINS");
+            entity.HasKey(a => a.AdminId);
+            entity.Property(a => a.Name)
+                .HasMaxLength(150);
+            entity.Property(a => a.Email)
+                .HasMaxLength(256);
+            entity.HasIndex(a => a.Email)
+                .IsUnique();
+            entity.Property(a => a.PasswordHash)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.HasMany(a => a.Users)
+                .WithMany(u => u.Admins);
+        });
+
+        modelBuilder.Entity<AdminAccessRequest>(entity =>
+        {
+            entity.ToTable("ADMIN_ACCESS_REQUESTS");
+            entity.HasKey(r => r.AdminAccessRequestId);
+            entity.Property(r => r.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Pending");
+            entity.HasIndex(r => new { r.AdminId, r.UserId })
+                .IsUnique();
+            entity.HasOne(r => r.Admin)
+                .WithMany()
+                .HasForeignKey(r => r.AdminId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // STREAM_SESSIONS

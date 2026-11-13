@@ -1,0 +1,532 @@
+{
+  "image": "20261106_153232_913_6318844f07214f518f8e34142f68ef03.jpg",
+  "imageWidth": 800,
+  "imageHeight": 533,
+  "depthModel": "UniDepth V2 Small",
+  "depthPrecision": "torch.float32",
+  "detectedObjects": [
+    {
+      "label": "car",
+      "confidence": 0.94,
+      "depth": 11.49,
+      "depthUnit": "meters",
+      "x1": 220.11,
+      "y1": 378.47,
+      "x2": 407.53,
+      "y2": 528.14
+    },
+    {
+      "label": "car",
+      "confidence": 0.9,
+      "depth": 15.0,
+      "depthUnit": "meters",
+      "x1": 154.78,
+      "y1": 334.6,
+      "x2": 277.42,
+      "y2": 456.71
+    },
+    {
+      "label": "car",
+      "confidence": 0.88,
+      "depth": 28.77,
+      "depthUnit": "meters",
+      "x1": 348.09,
+      "y1": 210.68,
+      "x2": 425.66,
+      "y2": 276.7
+    },
+    {
+      "label": "car",
+      "confidence": 0.86,
+      "depth": 12.44,
+      "depthUnit": "meters",
+      "x1": 489.67,
+      "y1": 336.47,
+      "x2": 620.93,
+      "y2": 489.44
+    },
+    {
+      "label": "car",
+      "confidence": 0.84,
+      "depth": 28.67,
+      "depthUnit": "meters",
+      "x1": 619.09,
+      "y1": 207.79,
+      "x2": 701.37,
+      "y2": 275.53
+    },
+    {
+      "label": "person",
+      "confidence": 0.83,
+      "depth": 14.49,
+      "depthUnit": "meters",
+      "x1": 688.38,
+      "y1": 329.62,
+      "x2": 739.01,
+      "y2": 423.09
+    },
+    {
+      "label": "car",
+      "confidence": 0.83,
+      "depth": 34.62,
+      "depthUnit": "meters",
+      "x1": 314.33,
+      "y1": 180.77,
+      "x2": 383.35,
+      "y2": 240.95
+    },
+    {
+      "label": "car",
+      "confidence": 0.8,
+      "depth": 52.64,
+      "depthUnit": "meters",
+      "x1": 189.27,
+      "y1": 131.27,
+      "x2": 230.79,
+      "y2": 165.91
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.8,
+      "depth": 17.68,
+      "depthUnit": "meters",
+      "x1": 600.85,
+      "y1": 317.15,
+      "x2": 636.39,
+      "y2": 383.79
+    },
+    {
+      "label": "bus",
+      "confidence": 0.78,
+      "depth": 47.67,
+      "depthUnit": "meters",
+      "x1": 293.32,
+      "y1": 84.63,
+      "x2": 375.84,
+      "y2": 172.75
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.77,
+      "depth": 16.57,
+      "depthUnit": "meters",
+      "x1": 356.06,
+      "y1": 347.88,
+      "x2": 401.39,
+      "y2": 403.17
+    },
+    {
+      "label": "person",
+      "confidence": 0.77,
+      "depth": 10.48,
+      "depthUnit": "meters",
+      "x1": 244.54,
+      "y1": 475.99,
+      "x2": 310.84,
+      "y2": 532.93
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.76,
+      "depth": 14.4,
+      "depthUnit": "meters",
+      "x1": 688.01,
+      "y1": 365.07,
+      "x2": 737.41,
+      "y2": 451.2
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.76,
+      "depth": 21.9,
+      "depthUnit": "meters",
+      "x1": 560.57,
+      "y1": 262.49,
+      "x2": 596.85,
+      "y2": 312.96
+    },
+    {
+      "label": "person",
+      "confidence": 0.76,
+      "depth": 16.67,
+      "depthUnit": "meters",
+      "x1": 313.22,
+      "y1": 339.27,
+      "x2": 352.59,
+      "y2": 381.0
+    },
+    {
+      "label": "person",
+      "confidence": 0.76,
+      "depth": 17.28,
+      "depthUnit": "meters",
+      "x1": 356.46,
+      "y1": 315.02,
+      "x2": 401.73,
+      "y2": 385.44
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.75,
+      "depth": 33.71,
+      "depthUnit": "meters",
+      "x1": 444.45,
+      "y1": 205.55,
+      "x2": 470.76,
+      "y2": 241.98
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.75,
+      "depth": 19.13,
+      "depthUnit": "meters",
+      "x1": 427.66,
+      "y1": 310.29,
+      "x2": 465.36,
+      "y2": 374.29
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.75,
+      "depth": 30.03,
+      "depthUnit": "meters",
+      "x1": 497.92,
+      "y1": 224.04,
+      "x2": 524.62,
+      "y2": 265.59
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.73,
+      "depth": 36.05,
+      "depthUnit": "meters",
+      "x1": 147.2,
+      "y1": 206.14,
+      "x2": 168.8,
+      "y2": 242.52
+    },
+    {
+      "label": "person",
+      "confidence": 0.72,
+      "depth": 19.79,
+      "depthUnit": "meters",
+      "x1": 425.64,
+      "y1": 279.08,
+      "x2": 465.86,
+      "y2": 343.66
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.71,
+      "depth": 16.86,
+      "depthUnit": "meters",
+      "x1": 463.93,
+      "y1": 333.49,
+      "x2": 500.92,
+      "y2": 408.15
+    },
+    {
+      "label": "car",
+      "confidence": 0.71,
+      "depth": 31.9,
+      "depthUnit": "meters",
+      "x1": 572.17,
+      "y1": 195.71,
+      "x2": 636.72,
+      "y2": 254.59
+    },
+    {
+      "label": "person",
+      "confidence": 0.66,
+      "depth": 33.81,
+      "depthUnit": "meters",
+      "x1": 441.54,
+      "y1": 181.78,
+      "x2": 469.39,
+      "y2": 228.8
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.66,
+      "depth": 28.34,
+      "depthUnit": "meters",
+      "x1": 197.9,
+      "y1": 241.88,
+      "x2": 224.3,
+      "y2": 286.93
+    },
+    {
+      "label": "car",
+      "confidence": 0.66,
+      "depth": 93.55,
+      "depthUnit": "meters",
+      "x1": 223.53,
+      "y1": 83.13,
+      "x2": 245.83,
+      "y2": 102.97
+    },
+    {
+      "label": "car",
+      "confidence": 0.65,
+      "depth": 37.24,
+      "depthUnit": "meters",
+      "x1": 510.86,
+      "y1": 174.98,
+      "x2": 562.46,
+      "y2": 228.19
+    },
+    {
+      "label": "truck",
+      "confidence": 0.64,
+      "depth": 19.61,
+      "depthUnit": "meters",
+      "x1": 234.88,
+      "y1": 277.57,
+      "x2": 330.96,
+      "y2": 380.37
+    },
+    {
+      "label": "car",
+      "confidence": 0.64,
+      "depth": 40.43,
+      "depthUnit": "meters",
+      "x1": 472.64,
+      "y1": 162.81,
+      "x2": 527.09,
+      "y2": 210.07
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.64,
+      "depth": 21.49,
+      "depthUnit": "meters",
+      "x1": 341.36,
+      "y1": 287.68,
+      "x2": 372.14,
+      "y2": 342.41
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.63,
+      "depth": 18.47,
+      "depthUnit": "meters",
+      "x1": 778.08,
+      "y1": 321.61,
+      "x2": 799.86,
+      "y2": 380.84
+    },
+    {
+      "label": "person",
+      "confidence": 0.63,
+      "depth": 20.76,
+      "depthUnit": "meters",
+      "x1": 457.91,
+      "y1": 264.84,
+      "x2": 493.24,
+      "y2": 311.59
+    },
+    {
+      "label": "car",
+      "confidence": 0.62,
+      "depth": 79.86,
+      "depthUnit": "meters",
+      "x1": 198.95,
+      "y1": 94.3,
+      "x2": 223.04,
+      "y2": 116.48
+    },
+    {
+      "label": "person",
+      "confidence": 0.62,
+      "depth": 30.48,
+      "depthUnit": "meters",
+      "x1": 492.31,
+      "y1": 199.36,
+      "x2": 523.38,
+      "y2": 251.41
+    },
+    {
+      "label": "car",
+      "confidence": 0.61,
+      "depth": 52.96,
+      "depthUnit": "meters",
+      "x1": 132.36,
+      "y1": 126.53,
+      "x2": 176.49,
+      "y2": 172.51
+    },
+    {
+      "label": "car",
+      "confidence": 0.61,
+      "depth": 26.14,
+      "depthUnit": "meters",
+      "x1": 698.01,
+      "y1": 217.69,
+      "x2": 794.2,
+      "y2": 294.44
+    },
+    {
+      "label": "person",
+      "confidence": 0.6,
+      "depth": 21.28,
+      "depthUnit": "meters",
+      "x1": 64.4,
+      "y1": 273.63,
+      "x2": 89.97,
+      "y2": 353.18
+    },
+    {
+      "label": "car",
+      "confidence": 0.6,
+      "depth": 34.99,
+      "depthUnit": "meters",
+      "x1": 543.92,
+      "y1": 185.69,
+      "x2": 594.6,
+      "y2": 235.33
+    },
+    {
+      "label": "person",
+      "confidence": 0.59,
+      "depth": 23.21,
+      "depthUnit": "meters",
+      "x1": 558.05,
+      "y1": 238.54,
+      "x2": 596.45,
+      "y2": 303.48
+    },
+    {
+      "label": "person",
+      "confidence": 0.59,
+      "depth": 25.52,
+      "depthUnit": "meters",
+      "x1": 704.62,
+      "y1": 227.12,
+      "x2": 729.54,
+      "y2": 298.97
+    },
+    {
+      "label": "car",
+      "confidence": 0.58,
+      "depth": 38.66,
+      "depthUnit": "meters",
+      "x1": 271.98,
+      "y1": 165.8,
+      "x2": 328.44,
+      "y2": 210.11
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.58,
+      "depth": 37.53,
+      "depthUnit": "meters",
+      "x1": 391.01,
+      "y1": 188.53,
+      "x2": 424.48,
+      "y2": 228.15
+    },
+    {
+      "label": "car",
+      "confidence": 0.57,
+      "depth": 63.28,
+      "depthUnit": "meters",
+      "x1": 180.74,
+      "y1": 115.86,
+      "x2": 215.51,
+      "y2": 147.7
+    },
+    {
+      "label": "person",
+      "confidence": 0.57,
+      "depth": 30.66,
+      "depthUnit": "meters",
+      "x1": 60.93,
+      "y1": 201.97,
+      "x2": 82.38,
+      "y2": 264.03
+    },
+    {
+      "label": "person",
+      "confidence": 0.55,
+      "depth": 18.79,
+      "depthUnit": "meters",
+      "x1": 463.86,
+      "y1": 303.23,
+      "x2": 501.18,
+      "y2": 344.07
+    },
+    {
+      "label": "person",
+      "confidence": 0.54,
+      "depth": 37.41,
+      "depthUnit": "meters",
+      "x1": 145.37,
+      "y1": 185.11,
+      "x2": 169.65,
+      "y2": 210.76
+    },
+    {
+      "label": "person",
+      "confidence": 0.52,
+      "depth": 20.27,
+      "depthUnit": "meters",
+      "x1": 90.86,
+      "y1": 291.23,
+      "x2": 121.25,
+      "y2": 383.86
+    },
+    {
+      "label": "person",
+      "confidence": 0.52,
+      "depth": 22.2,
+      "depthUnit": "meters",
+      "x1": 104.72,
+      "y1": 265.11,
+      "x2": 129.9,
+      "y2": 327.15
+    },
+    {
+      "label": "motorbike",
+      "confidence": 0.51,
+      "depth": 45.87,
+      "depthUnit": "meters",
+      "x1": 247.96,
+      "y1": 161.38,
+      "x2": 267.71,
+      "y2": 189.75
+    },
+    {
+      "label": "person",
+      "confidence": 0.5,
+      "depth": 29.63,
+      "depthUnit": "meters",
+      "x1": 94.81,
+      "y1": 222.73,
+      "x2": 119.09,
+      "y2": 270.67
+    },
+    {
+      "label": "truck",
+      "confidence": 0.5,
+      "depth": 26.38,
+      "depthUnit": "meters",
+      "x1": 220.74,
+      "y1": 206.07,
+      "x2": 296.9,
+      "y2": 271.39
+    },
+    {
+      "label": "truck",
+      "confidence": 0.5,
+      "depth": 21.1,
+      "depthUnit": "meters",
+      "x1": 221.7,
+      "y1": 238.59,
+      "x2": 326.92,
+      "y2": 307.56
+    }
+  ],
+  "ocrResults": [],
+  "question": "Whats the nearest thing and is it alert?",
+  "answer": "The nearest thing is a person, and it is approximately 10.5 meters away."
+}

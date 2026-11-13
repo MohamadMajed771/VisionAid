@@ -1,0 +1,33 @@
+{
+  "image": "20261106_111213_540_c01f8fecda594279aa9601ad8ca83fa5.jpg",
+  "imageWidth": 553,
+  "imageHeight": 612,
+  "depthModel": "UniDepth V2 Small",
+  "depthPrecision": "torch.float32",
+  "detectedObjects": [
+    {
+      "label": "stop sign",
+      "confidence": 0.93,
+      "depth": 4.41,
+      "depthUnit": "meters",
+      "x1": 361.58,
+      "y1": 158.4,
+      "x2": 422.09,
+      "y2": 233.7
+    }
+  ],
+  "ocrResults": [
+    {
+      "extractedText": "STOP",
+      "confidence": 0.999,
+      "boundingBox": [
+        356,
+        168,
+        425,
+        220
+      ]
+    }
+  ],
+  "question": "What is in front of me",
+  "answer": "There's a stop sign about 4.4 meters in front of you."
+}
