@@ -37,6 +37,11 @@ from piper_tts_service import (
     synthesize_speech
 )
 
+from scrfd_face_detector import (
+    load_face_detector,
+    mask_faces
+)
+
 
 # ------------------------------------
 # Configuration
@@ -83,6 +88,10 @@ async def lifespan(app: FastAPI):
 
     # Load UniDepth V2
     await run_in_threadpool(load_unidepth)
+
+    # Load SCRFD-2.5G face detector on CPU
+    print("\nLoading SCRFD-2.5G face detector...")
+    await run_in_threadpool(load_face_detector)
 
     # Load Whisper
     await run_in_threadpool(load_whisper)
@@ -443,6 +452,28 @@ async def analyze_frame_for_backend(
 
         # Create annotated image in memory
         image_buffer = io.BytesIO()
+
+        # Detect faces from the original image and
+        # mask them on the annotated image.
+        print("\nApplying SCRFD face privacy masking...")
+
+        with Image.open(temporary_path) as source_image:
+            original_image = source_image.convert("RGB")
+
+        annotated_image, faces_masked = await run_in_threadpool(
+            mask_faces,
+            original_image,
+            annotated_image
+        )
+
+        print(f"Faces masked: {faces_masked}")
+
+        backend_result["faceMasking"] = {
+            "model": "SCRFD-2.5G",
+            "device": "CPU",
+            "facesMasked": faces_masked,
+            "method": "solid_black_rectangles"
+        }
 
         annotated_image.save(
             image_buffer,

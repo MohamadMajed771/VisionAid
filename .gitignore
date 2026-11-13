@@ -92,3 +92,37 @@ ai-models/tts-env/
 # Other downloaded model/source folders
 ai-models/rtdetr-v2/
 ai-models/unidepth-source/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+face-env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# IDE files
+.idea/
+.vscode/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Generated analysis outputs
+outputs/
+results/
+
+# Allow SCRFD face detection model to be uploaded to GitHub
+!ai-models/face-models/scrfd_2.5g.onnx
