@@ -1,5 +1,5 @@
 import { API_CONFIG } from "./config";
-
+import { fetch as expoFetch } from "expo/fetch";
 const BASE_URL = API_CONFIG.baseUrl;
 
 export class ApiError extends Error {
@@ -39,33 +39,50 @@ export async function apiRequest<T>(
   
 
   const controller = new AbortController();
-  
+
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
   let response: Response;
   let text: string;
-
+  console.log("API URL:", BASE_URL);
+  console.log("Request endpoint:", endpoint);
   try {
-  response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-    signal: controller.signal,
-  });
+  
+    const url = `${BASE_URL}${endpoint}`;
 
-    text = await response.text();
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        "The request timed out. Please try again."
-      );
+    const requestOptions = {
+      ...options,
+      headers,
+      signal: controller.signal,
+    };
+
+    if (options.body instanceof FormData) {
+      // Camera image upload.
+      response = await expoFetch(url, requestOptions);
+    } else {
+      // Login, Register, Sessions, and normal JSON requests.
+      response = await fetch(url, requestOptions);
     }
 
-    throw new Error(
-      "Cannot connect to VisionAid API."
-    );
-  } finally {
+
+    text = await response.text();
+  }catch (error) {
+  if (__DEV__) {
+  console.log(
+    "API request failed:",
+    endpoint,
+    error instanceof Error ? error.message : String(error)
+  );
+}
+
+  if (controller.signal.aborted) {
+    throw new Error("Request timed out.");
+  }
+
+  throw new Error("Cannot connect to VisionAid API.");
+}finally {
     clearTimeout(timeoutId);
   }
 

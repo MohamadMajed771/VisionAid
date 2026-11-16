@@ -149,4 +149,3 @@ C:\Users\HP RALPH\Desktop\University\Semestre 7\Multimedia Databases and Image P
 C:\Users\HP RALPH\Desktop\University\Semestre 7\Multimedia Databases and Image Processing\VisionAid\backend\VisionAid.Api\obj\Debug\net10.0\VisionAid.Api.pdb
 C:\Users\HP RALPH\Desktop\University\Semestre 7\Multimedia Databases and Image Processing\VisionAid\backend\VisionAid.Api\obj\Debug\net10.0\VisionAid.Api.genruntimeconfig.cache
 C:\Users\HP RALPH\Desktop\University\Semestre 7\Multimedia Databases and Image Processing\VisionAid\backend\VisionAid.Api\obj\Debug\net10.0\ref\VisionAid.Api.dll
-C:\Users\HP RALPH\Desktop\University\Semestre 7\Multimedia Databases and Image Processing\VisionAid\backend\VisionAid.Api\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

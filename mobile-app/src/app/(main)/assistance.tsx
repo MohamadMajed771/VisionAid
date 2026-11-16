@@ -1,4 +1,5 @@
-
+import * as Speech from "expo-speech";
+import WavQuestionRecorder from "../../components/assistance/WavQuestionRecorder";
 import {
   useCallback,
   useEffect,
@@ -34,13 +35,15 @@ export default function AssistanceScreen() {
     useState<string | null>(null);
 
   const [focused, setFocused] = useState(false);
-
+ // focused make sure the assistance screen is active as the navigation screen
   const [appActive, setAppActive] = useState(
     AppState.currentState === "active"
   );
-
+  // make sure we are opening the applicationto capture images (and not another app while our in background)
   const [stopping, setStopping] = useState(false);
-
+  const lastSpokenAnswerRef = useRef<string | null>(null);
+  const [recordedAudioUri, setRecordedAudioUri] =
+  useState<string | null>(null);
   // Track when the Assistance screen is visible.
   useFocusEffect(
     useCallback(() => {
@@ -79,7 +82,7 @@ export default function AssistanceScreen() {
   } = useAssistanceSession(token);
 
   const cameraVisible = focused && appActive;
-
+   // to make sure i am opening assistance.tsx and the app at the same time 
   const handleCameraReady = useCallback(() => {
     setCameraError(null);
     setCameraReady(true);
@@ -101,8 +104,9 @@ export default function AssistanceScreen() {
 
     const photo = await cameraRef.current.takePictureAsync({
       quality: 0.5,
-      base64: false,
+      base64: false, // to take the uri and not transform it to string
       skipProcessing: false,
+      shutterSound: false,//to make sound of camera picture gone
     });
 
     if (!photo?.uri) {
@@ -132,6 +136,52 @@ export default function AssistanceScreen() {
     captureFrame,
   });
 
+
+        
+    useEffect(() => {
+      // Never speak after leaving Assistance
+      // or while the screen is stopping.
+      if (!focused || !appActive || stopping) {
+        void Speech.stop();
+        return;
+      }
+  
+      const answer = lastAnswer?.trim();
+  
+      if (!answer) return;
+  
+      // Avoid speaking the same automatic answer
+      // repeatedly for consecutive frames.
+      if (lastSpokenAnswerRef.current === answer) {
+        return;
+      }
+  
+      lastSpokenAnswerRef.current = answer;
+  
+      let cancelled = false;
+  
+      void Speech.stop()
+        .then(() => {
+          if (cancelled) return;
+        
+          Speech.speak(answer, {
+            language: "en-US",
+            rate: 0.95,
+          });
+        })
+        .catch((error) => {
+          if (__DEV__) {
+            console.log("TTS error:", error);
+          }
+        });
+    
+      return () => {
+        cancelled = true;
+        void Speech.stop();
+      };
+    }, [lastAnswer, focused, appActive, stopping]);
+
+
   async function handleStop() {
     if (stopping || !session) {
       return;
@@ -160,7 +210,15 @@ export default function AssistanceScreen() {
       <Text style={styles.title}>
         VisionAid Assistance
       </Text>
+       <Pressable
+            style={styles.stopButton}
+            onPress={() => Speech.speak("VisionAid voice test")}
 
+            accessibilityRole="button"
+            accessibilityLabel="Speak Aloud"
+          >
+            <Text>Test speak aloud</Text>
+          </Pressable>
       {loading && (
         <View style={styles.center}>
           <ActivityIndicator size="large" />
@@ -187,7 +245,16 @@ export default function AssistanceScreen() {
               </View>
             )}
           </View>
+          <WavQuestionRecorder
+              onRecorded={(uri) => {
+                setRecordedAudioUri(uri);
+                console.log("WAV recording completed.");
+              }}
+            />
 
+            {recordedAudioUri && (
+              <Text>Question recorded successfully.</Text>
+            )}
           <Text style={styles.info}>
             {stopping
               ? "Finishing the current analysis..."

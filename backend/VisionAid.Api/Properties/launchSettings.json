@@ -7,7 +7,8 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "applicationUrl": "http://localhost:5011;http://192.168.1.19:5011",
-     // "applicationUrl": "http://0.0.0.0:5011",
+      //"applicationUrl": "http://localhost:5011;http://172.16.186.78:5011",
+      //"applicationUrl": "http://0.0.0.0:5011",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
@@ -18,6 +19,7 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "applicationUrl": "https://localhost:7147;http://localhost:5011;http://192.168.1.19:5011",
+     // "applicationUrl": "https://localhost:7147;http://localhost:5011;http://172.16.186.78:5011",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
 

@@ -22,7 +22,7 @@ public class AnalysisService : IAnalysisService
 
     public async Task<string?> AnalyzeFrameAsync(
         int frameId,
-        string originalImagePath, string? question = null)
+        string originalImagePath, IFormFile? audio = null)
     {
         // 1. Resolve the original image's full path.
         var backendFolder = Path.GetFullPath(
@@ -61,19 +61,26 @@ public class AnalysisService : IAnalysisService
             contentType = "application/octet-stream";
         }
 
-        imageContent.Headers.ContentType =
-            new MediaTypeHeaderValue(contentType);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
 
-        form.Add(
-            imageContent,
+        form.Add(imageContent,
             "image",
             Path.GetFileName(fullImagePath));
-            if (!string.IsNullOrWhiteSpace(question))
-             {
-         form.Add(
-        new StringContent(question),
-        "question");
-            }
+            // Add the WAV audio if provided.
+if (audio is not null)
+{
+    var audioStream = audio.OpenReadStream();
+
+    var audioContent = new StreamContent(audioStream);
+
+    audioContent.Headers.ContentType =
+        new MediaTypeHeaderValue("audio/wav");
+
+    form.Add(
+        audioContent,
+        "audio",
+        audio.FileName);
+}
 
         // 4. Send the image to FastAPI.
         using var response = await _httpClient.PostAsync(

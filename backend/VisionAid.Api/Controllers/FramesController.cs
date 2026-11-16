@@ -23,53 +23,52 @@ public class FramesController : ControllerBase
         _analysisService = analysisService;
     }
 
-    [HttpPost]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> UploadFrame(
-        int sessionId,
-     [FromForm] UploadFrameRequestDto request)
+[HttpPost]
+[Consumes("multipart/form-data")]
+public async Task<IActionResult> UploadFrame(
+    int sessionId,
+    [FromForm] UploadFrameRequestDto request)
+{
+    var userIdClaim = User.FindFirstValue(
+        ClaimTypes.NameIdentifier);
+
+    if (!int.TryParse(userIdClaim, out var userId))
+        return Unauthorized();
+
+    try
     {
-        var userIdClaim = User.FindFirstValue(
-            ClaimTypes.NameIdentifier);
+        // Save the original image and create its database record.
+        var uploadedFrame = await _frameService.UploadFrameAsync(
+            sessionId,
+            userId,
+            request.Image);
 
-        if (!int.TryParse(userIdClaim, out var userId))
-            return Unauthorized();
+        // Send the image and optional WAV audio for analysis.
+        var answer = await _analysisService.AnalyzeFrameAsync(
+            uploadedFrame.FrameId,
+            uploadedFrame.ImagePath,
+            request.Question);
 
-        try
+        var response = new UploadAndAnalyzeFrameResponseDto
         {
-            // Save the original image and create its database record.
-            var uploadedFrame = await _frameService.UploadFrameAsync(
-                sessionId,
-                userId,
-                request.Image);
+            FrameId = uploadedFrame.FrameId,
+            SessionId = uploadedFrame.SessionId,
+            Answer = answer,
+            CapturedAt = uploadedFrame.CapturedAt
+        };
 
-            // Send the original image to FastAPI and save its results.
-            var answer = await _analysisService.AnalyzeFrameAsync(
-                uploadedFrame.FrameId,
-                uploadedFrame.ImagePath,
-                request.Question);
-
-            var response = new UploadAndAnalyzeFrameResponseDto
-            {
-                FrameId = uploadedFrame.FrameId,
-                SessionId = uploadedFrame.SessionId,
-                Answer = answer,
-                CapturedAt = uploadedFrame.CapturedAt
-            };
-
-            return Ok(response);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(ex.Message);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        return Ok(response);
     }
-}
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(ex.Message);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Conflict(ex.Message);
+    }
+    catch (ArgumentException ex)
+    {
+        return BadRequest(ex.Message);
+    }
+}}

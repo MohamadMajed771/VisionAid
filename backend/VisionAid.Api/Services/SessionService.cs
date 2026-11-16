@@ -131,13 +131,16 @@ public async Task<List<SessionResponseDto>> GetEndedAsync(int userId)
         int adminId,
         int userId)
     {
-        var user = await _context.Users
-            .AsNoTracking()
-            .Where(u =>
-                u.UserId == userId &&
-                u.Admins.Any(a => a.AdminId == adminId))
-            .Include(u => u.StreamSessions)
-            .FirstOrDefaultAsync();
+       var user = await _context.Users
+    .AsNoTracking()
+    .Where(u =>
+        u.UserId == userId &&
+        _context.AdminAccessRequests.Any(r =>
+            r.AdminId == adminId &&
+            r.UserId == u.UserId &&
+            r.Status == "Accepted"))
+    .Include(u => u.StreamSessions)
+    .FirstOrDefaultAsync();
 
         if (user is null)
             return null;
