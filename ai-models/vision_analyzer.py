@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import cv2
 
 from safetensors.torch import load_file
 from PIL import Image, ImageDraw
@@ -53,6 +54,24 @@ DETECTOR_DEVICE = torch.device(
 CLEAR_UNUSED_GPU_CACHE = True
 
 DETECTION_THRESHOLD = 0.5
+
+# Automatic alert configuration
+OCR_ALERT_CONFIDENCE = 0.80
+
+NEARBY_OBSTACLE_DISTANCE = 1.0
+CRITICAL_OBSTACLE_DISTANCE = 0.5
+
+MIN_CLOSE_PIXEL_RATIO = 0.20
+
+# Image quality configuration
+BLUR_THRESHOLD = 100.0
+QUALITY_IMAGE_SIZE = 640
+
+
+# Model reliability configuration
+MIN_OBJECT_CONFIDENCE = 0.70
+MIN_OCR_CONFIDENCE = 0.80
+MIN_VALID_DEPTH_RATIO = 0.50
 
 
 # ------------------------------------
@@ -232,6 +251,297 @@ def load_unidepth():
     return model, None, elapsed
 
 
+
+def get_direction(bounding_box, image_width):
+
+    x1, y1, x2, y2 = bounding_box
+
+    center_x = (x1 + x2) / 2
+
+    if center_x < image_width / 3:
+        return "left"
+
+    elif center_x > 2 * image_width / 3:
+        return "right"
+
+    return "center"
+
+
+def estimate_region_distance(
+    bounding_box,
+    depth_map,
+    image_width,
+    image_height
+):
+
+    if bounding_box is None or len(bounding_box) != 4:
+        return None
+
+    x1, y1, x2, y2 = bounding_box
+
+    depth_height, depth_width = depth_map.shape
+
+    left = max(
+        0,
+        int(x1 * depth_width / image_width)
+    )
+
+    right = min(
+        depth_width,
+        int(np.ceil(x2 * depth_width / image_width))
+    )
+
+    top = max(
+        0,
+        int(y1 * depth_height / image_height)
+    )
+
+    bottom = min(
+        depth_height,
+        int(np.ceil(y2 * depth_height / image_height))
+    )
+
+    if right <= left or bottom <= top:
+        return None
+
+    region = depth_map[top:bottom, left:right]
+
+    valid_depths = region[
+        np.isfinite(region) & (region > 0)
+    ]
+
+    if valid_depths.size == 0:
+        return None
+
+    distance = float(np.median(valid_depths))
+
+    return round(distance, 2)
+
+def detect_nearby_obstacle(depth_map):
+
+    depth_height, depth_width = depth_map.shape
+
+    # Analyze the central region of the image.
+    left = int(depth_width * 0.30)
+    right = int(depth_width * 0.70)
+
+    top = int(depth_height * 0.20)
+    bottom = int(depth_height * 0.75)
+
+    region = depth_map[top:bottom, left:right]
+
+    if region.size == 0:
+        return None
+
+    valid_mask = np.isfinite(region) & (region > 0)
+
+    # Require enough valid depth measurements.
+    if np.count_nonzero(valid_mask) / region.size < 0.50:
+        return None
+
+    # Detect very close surfaces.
+    critical_mask = (
+        valid_mask &
+        (region <= CRITICAL_OBSTACLE_DISTANCE)
+    )
+
+    critical_ratio = (
+        np.count_nonzero(critical_mask) / region.size
+    )
+
+    if critical_ratio >= MIN_CLOSE_PIXEL_RATIO:
+
+        distance = float(
+            np.median(region[critical_mask])
+        )
+
+        return {
+            "level": "critical",
+            "distance": round(distance, 2)
+        }
+
+    # Detect nearby surfaces.
+    nearby_mask = (
+        valid_mask &
+        (region <= NEARBY_OBSTACLE_DISTANCE)
+    )
+
+    nearby_ratio = (
+        np.count_nonzero(nearby_mask) / region.size
+    )
+
+    if nearby_ratio >= MIN_CLOSE_PIXEL_RATIO:
+
+        distance = float(
+            np.median(region[nearby_mask])
+        )
+
+        return {
+            "level": "warning",
+            "distance": round(distance, 2)
+        }
+
+    return None
+
+
+def check_image_quality(image_path):
+
+    start_time = time.perf_counter()
+
+    # Read the image
+    with Image.open(image_path) as source_image:
+        image = source_image.convert("RGB")
+
+    # Convert image to NumPy array
+    image_array = np.array(image)
+
+    height, width = image_array.shape[:2]
+
+    # Resize while preserving aspect ratio
+    scale = QUALITY_IMAGE_SIZE / max(width, height)
+
+    new_width = max(1, int(width * scale))
+    new_height = max(1, int(height * scale))
+
+    resized_image = cv2.resize(
+        image_array,
+        (new_width, new_height),
+        interpolation=(
+            cv2.INTER_AREA
+            if scale < 1
+            else cv2.INTER_LINEAR
+        )
+    )
+
+    # Convert RGB image to grayscale
+    gray_image = cv2.cvtColor(
+        resized_image,
+        cv2.COLOR_RGB2GRAY
+    )
+
+    # Calculate the variance of the Laplacian
+    blur_score = float(
+        cv2.Laplacian(
+            gray_image,
+            cv2.CV_64F
+        ).var()
+    )
+
+    # Check whether the image is blurry
+    is_blurry = blur_score < BLUR_THRESHOLD
+
+    processing_time = time.perf_counter() - start_time
+
+    print("\n===================================")
+    print("VisionAid Image Quality Check")
+    print("===================================")
+
+    print(f"Blur score: {blur_score:.2f}")
+    print(f"Blur threshold: {BLUR_THRESHOLD}")
+
+    if is_blurry:
+        print("WARNING: Image appears blurry.")
+    else:
+        print("Image passed the sharpness check.")
+
+    print(
+        f"Quality check time: "
+        f"{processing_time:.3f} seconds"
+    )
+
+    print("===================================")
+
+    return {
+        "blur_score": round(blur_score, 2),
+        "is_blurry": is_blurry,
+        "processing_time_seconds": round(
+            processing_time, 3
+        )
+    }
+
+
+def check_analysis_reliability(objects, texts, depth_map):
+
+    # Check object detection confidence
+    reliable_objects = [
+        obj for obj in objects
+        if obj["confidence"] >= MIN_OBJECT_CONFIDENCE
+    ]
+
+    # Check OCR confidence
+    reliable_texts = [
+        item for item in texts
+        if item["confidence"] >= MIN_OCR_CONFIDENCE
+    ]
+
+    # Check valid depth measurements
+    valid_depth_mask = (
+        np.isfinite(depth_map) &
+        (depth_map > 0)
+    )
+
+    valid_depth_ratio = (
+        np.count_nonzero(valid_depth_mask) / depth_map.size
+        if depth_map.size > 0
+        else 0.0
+    )
+
+    depth_is_valid = (
+        valid_depth_ratio >= MIN_VALID_DEPTH_RATIO
+    )
+
+    # Check whether all detected observations
+    # have low confidence
+    has_observations = bool(objects or texts)
+
+    has_reliable_observations = bool(
+        reliable_objects or reliable_texts
+    )
+
+    low_confidence = (
+        has_observations
+        and not has_reliable_observations
+    )
+
+    is_unreliable = (
+        low_confidence or not depth_is_valid
+    )
+
+    print("\n===================================")
+    print("VisionAid Reliability Check")
+    print("===================================")
+
+    print(
+        f"Reliable objects: "
+        f"{len(reliable_objects)}/{len(objects)}"
+    )
+
+    print(
+        f"Reliable OCR texts: "
+        f"{len(reliable_texts)}/{len(texts)}"
+    )
+
+    print(
+        f"Valid depth pixels: "
+        f"{valid_depth_ratio * 100:.2f}%"
+    )
+
+    if is_unreliable:
+        print("WARNING: Analysis may be unreliable.")
+    else:
+        print("Analysis passed reliability checks.")
+
+    print("===================================")
+
+    return {
+        "is_unreliable": is_unreliable,
+        "low_confidence": low_confidence,
+        "depth_is_valid": depth_is_valid,
+        "valid_depth_ratio": round(valid_depth_ratio, 4),
+        "reliable_objects": len(reliable_objects),
+        "reliable_texts": len(reliable_texts)
+    }
+
 # ------------------------------------
 # 6. Analyze image
 # ------------------------------------
@@ -390,6 +700,18 @@ def _analyze_image_locked(image_path):
 
     del depth_input, prediction
 
+    # Detect potentially dangerous nearby surfaces
+    nearby_obstacle = detect_nearby_obstacle(depth_map)
+
+    if nearby_obstacle is not None:
+        print(
+            f"PROXIMITY ALERT | "
+            f"Level: {nearby_obstacle['level']} | "
+            f"Distance: {nearby_obstacle['distance']} m"
+        )
+    else:
+        print("No proximity alert triggered.")
+
     # ------------------------------------
     # 12. Release unused GPU cache
     # ------------------------------------
@@ -526,11 +848,50 @@ def _analyze_image_locked(image_path):
 
     print("Texts detected:", len(texts))
 
+    # Internal OCR information for automatic alerts
+    ocr_spatial_results = []
+
     for text_data in texts:
+
+        bounding_box = text_data.get("bounding_box")
+
+        distance = None
+        direction = None
+
+        if bounding_box is not None and len(bounding_box) == 4:
+
+            distance = estimate_region_distance(
+                bounding_box,
+                depth_map,
+                image.width,
+                image.height
+            )
+
+            direction = get_direction(
+                bounding_box,
+                image.width
+            )
+
+        ocr_spatial_results.append({
+            "text": text_data["text"],
+            "confidence": text_data["confidence"],
+            "distance": distance,
+            "direction": direction
+        })
+
         print(
             f"Text: {text_data['text']} | "
-            f"Confidence: {text_data['confidence']}"
+            f"Confidence: {text_data['confidence']} | "
+            f"Distance: {distance} m | "
+            f"Direction: {direction}"
         )
+
+    # Evaluate model reliability
+    reliability = check_analysis_reliability(
+        objects,
+        texts,
+        depth_map
+    )
 
     # ------------------------------------
     # 15. GPU memory measurements
@@ -593,11 +954,18 @@ def _analyze_image_locked(image_path):
     # ------------------------------------
 
     combined_result = {
-        "objects_detected": len(objects),
-        "objects": objects,
-        "texts_detected": len(texts),
-        "texts": texts
-    }
+    "objects_detected": len(objects),
+    "objects": objects,
+    "texts_detected": len(texts),
+    "texts": texts,
+
+    # Information used for automatic alerts
+    "ocr_spatial_results": ocr_spatial_results,
+    "nearby_obstacle": nearby_obstacle,
+
+    # Internal model reliability information
+    "reliability": reliability
+}
     backend_result = {
     "image": image_path.name,
     "imageWidth": image.width,

@@ -1,3 +1,4 @@
+
 import os
 import time
 import threading
@@ -23,6 +24,8 @@ WHISPER_MODEL_PATH = BASE_DIR / "whisper-models"
 
 WHISPER_DEVICE = "cuda"
 WHISPER_COMPUTE_TYPE = "float16"
+
+SUPPORTED_WHISPER_LANGUAGES = {"en", "fr", "ar"}
 
 # Cached Whisper model
 _whisper_model = None
@@ -70,7 +73,7 @@ def transcribe_audio(audio_path, language=None):
 
     language=None enables automatic language detection.
 
-    Examples:
+    Supported languages:
         en = English
         fr = French
         ar = Arabic
@@ -83,11 +86,25 @@ def transcribe_audio(audio_path, language=None):
             f"Audio file not found: {audio_path}"
         )
 
+    # Validate the selected language
+    if language is not None:
+        language = language.strip().lower()
+
+        if language not in SUPPORTED_WHISPER_LANGUAGES:
+            raise ValueError(
+                "Supported languages are English, French and Arabic."
+            )
+
     model = load_whisper()
 
     print("\n===================================")
     print("VisionAid Speech Recognition")
     print("===================================")
+
+    print(
+        "Selected language:",
+        language if language is not None else "Automatic detection"
+    )
 
     start = time.perf_counter()
 
@@ -111,7 +128,7 @@ def transcribe_audio(audio_path, language=None):
 
     elapsed = time.perf_counter() - start
 
-    print("Detected language:", info.language)
+    print("Transcription language:", info.language)
     print("Language probability:", round(info.language_probability, 3))
     print("Transcription:", transcription)
     print(f"Processing time: {elapsed:.2f} seconds")
@@ -130,11 +147,6 @@ def transcribe_audio(audio_path, language=None):
 # Standalone test
 # ------------------------------------
 
-
-# ------------------------------------
-# Standalone test
-# ------------------------------------
-
 if __name__ == "__main__":
     import json
 
@@ -144,10 +156,17 @@ if __name__ == "__main__":
         "\nEnter audio file path: "
     ).strip().strip('"')
 
-    # Automatically detect English, French or Arabic
+    language = input(
+        "Enter language (en/fr/ar), "
+        "or press Enter for automatic detection: "
+    ).strip().lower()
+
+    if not language:
+        language = None
+
     result = transcribe_audio(
         audio_path,
-        language=None
+        language=language
     )
 
     print("\n========== WHISPER RESULTS ==========")
