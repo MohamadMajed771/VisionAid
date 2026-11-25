@@ -1,3 +1,4 @@
+```bat
 @echo off
 setlocal
 
@@ -89,7 +90,7 @@ echo.
 echo PaddleOCR API: http://127.0.0.1:8001
 echo Main API:      http://127.0.0.1:8000
 echo Swagger UI:    http://127.0.0.1:8000/docs
-echo Ollama API:    http://127.0.0.1:11434
+echo Ollama API:   http://127.0.0.1:11434
 echo.
 echo AI Models:
 echo - RT-DETRv2
@@ -97,9 +98,11 @@ echo - UniDepth V2 Small
 echo - Whisper Small
 echo - PaddleOCR
 echo - Llama 3.2
+echo - Piper TTS English and French
 echo.
 echo Wait for both servers to finish loading.
 echo Check both terminal windows for errors.
 echo.
 
 pause
+```
