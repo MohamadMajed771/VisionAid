@@ -26,85 +26,83 @@ public class FrameService : IFrameService
     }
 
     public async Task<UploadFrameResponseDto> UploadFrameAsync(
-        int sessionId,
-        int userId,
-        IFormFile image)
+    int userId,
+    IFormFile image)
+{
+    // 1. Find the user's active session.
+    var session = await _context.StreamSessions
+        .FirstOrDefaultAsync(s =>
+            s.UserId == userId &&
+            s.Status == "Active");
+
+    if (session is null)
+        throw new KeyNotFoundException(
+            "No active session found.");
+
+    // 2. Validate the uploaded image.
+    if (image is null || image.Length == 0)
+        throw new ArgumentException(
+            "The uploaded image is empty.");
+
+    // 3. Get Backend folder (parent of Visionaid.Api).
+    var backendFolder = Path.GetFullPath(
+        Path.Combine(_environment.ContentRootPath, ".."));
+
+    // 4. Create original images folder.
+    var uploadFolder = Path.Combine(
+        backendFolder,
+        "uploads",
+        "frames");
+
+    Directory.CreateDirectory(uploadFolder);
+
+    // 5. Generate a unique filename.
+    var capturedAt = DateTime.UtcNow;
+
+    var extension = Path.GetExtension(image.FileName);
+
+    var fileName =
+        $"{capturedAt:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}" +
+        extension;
+
+    // 6. Save original image.
+    var fullPath = Path.Combine(uploadFolder, fileName);
+
+    await using (var stream = new FileStream(
+        fullPath,
+        FileMode.CreateNew,
+        FileAccess.Write))
     {
-        // 1. Find the session and verify ownership.
-        var session = await _context.StreamSessions
-            .FirstOrDefaultAsync(s =>
-                s.SessionId == sessionId &&
-                s.UserId == userId);
-
-        if (session is null)
-            throw new KeyNotFoundException(
-                "Session not found.");
-
-        // 2. Make sure the session is active.
-        if (session.Status != "Active")
-            throw new InvalidOperationException(
-                "Cannot upload frames to an ended session.");
-
-        // 3. Validate the uploaded image.
-        if (image is null || image.Length == 0)
-            throw new ArgumentException(
-                "The uploaded image is empty.");
-
-        // 4. Get Backend folder (parent of VisionAid.Api).
-        var backendFolder = Path.GetFullPath(
-            Path.Combine(_environment.ContentRootPath, ".."));
-
-        // 5. Create original images folder.
-        var uploadFolder = Path.Combine(
-            backendFolder,
-            "uploads",
-            "frames");
-
-        Directory.CreateDirectory(uploadFolder);
-
-        // 6. Generate a unique filename.
-        var capturedAt = DateTime.UtcNow;
-
-        var fileName =
-            $"{capturedAt:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}" +
-            Path.GetExtension(image.FileName);
-
-        // 7. Save original image.
-        var fullPath = Path.Combine(uploadFolder, fileName);
-
-        await using (var stream = new FileStream(
-            fullPath,
-            FileMode.CreateNew,
-            FileAccess.Write))
-        {
-            await image.CopyToAsync(stream);
-        }
-
-        // 8. Store relative path.
-        var relativePath = Path.Combine(
-            "uploads",
-            "frames",
-            fileName);
-
-        var frame = new Frame
-        {
-            SessionId = sessionId,
-            ImagePath = relativePath,
-            CapturedAt = capturedAt,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.Frames.Add(frame);
-        await _context.SaveChangesAsync();
-
-        return new UploadFrameResponseDto
-        {
-            FrameId = frame.FrameId,
-            SessionId = frame.SessionId,
-            ImagePath = frame.ImagePath,
-            CapturedAt = frame.CapturedAt
-        };
+        await image.CopyToAsync(stream);
     }
+
+    // 7. Store relative path.
+    var relativePath = Path.Combine(
+        "uploads",
+        "frames",
+        fileName);
+
+    var frame = new Frame
+    {
+        SessionId = session.SessionId,
+        ImagePath = relativePath,
+        CapturedAt = capturedAt,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    // 8. Save frame to database.
+    _context.Frames.Add(frame);
+    await _context.SaveChangesAsync();
+
+    // 9. Return response.
+    return new UploadFrameResponseDto
+    {
+        FrameId = frame.FrameId,
+        SessionId = frame.SessionId,
+        ImagePath = frame.ImagePath,
+        CapturedAt = frame.CapturedAt
+    };
+}
 
     public async Task<string?> ProcessAnalysisResultAsync(
         int frameId,

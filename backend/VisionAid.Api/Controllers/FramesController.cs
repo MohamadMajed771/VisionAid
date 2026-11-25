@@ -10,7 +10,7 @@ namespace VisionAid.Api.Controllers;
 
 [Authorize(Roles = "User")]
 [ApiController]
-[Route("api/sessions/{sessionId:int}/frames")]
+[Route("api/analyse/frame")]
 public class FramesController : ControllerBase
 {
     private readonly IFrameService _frameService;
@@ -27,7 +27,6 @@ _context=context;
 [HttpPost]
 [Consumes("multipart/form-data")]
 public async Task<IActionResult> UploadFrame(
-    int sessionId,
     [FromForm] UploadFrameRequestDto request)
 {
     var userIdClaim = User.FindFirstValue(
@@ -44,7 +43,6 @@ public async Task<IActionResult> UploadFrame(
     .FirstOrDefaultAsync();
         // Save the original image and create its database record.
         var uploadedFrame = await _frameService.UploadFrameAsync(
-            sessionId,
             userId,
             request.Image);
 

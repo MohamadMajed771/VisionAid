@@ -7,7 +7,6 @@ namespace VisionAid.Api.Services.Interfaces;
 public interface IFrameService
 {
     Task<UploadFrameResponseDto> UploadFrameAsync(
-        int sessionId,
         int userId,
         IFormFile image);
 
