@@ -20,9 +20,13 @@ public class AnalysisService : IAnalysisService
         _environment = environment;
     }
 
+
     public async Task<string?> AnalyzeFrameAsync(
         int frameId,
-        string originalImagePath, IFormFile? audio = null)
+        string originalImagePath,
+        string language,
+        IFormFile? audio
+        )
     {
         // 1. Resolve the original image's full path.
         var backendFolder = Path.GetFullPath(
@@ -49,10 +53,16 @@ public class AnalysisService : IAnalysisService
         // 3. Prepare the multipart/form-data request.
         using var form = new MultipartFormDataContent();
 
+        // Add the preferred language.
+        form.Add(
+            new StringContent(language),
+            "language");
+
+        // Add the image.
         var imageContent = new StreamContent(imageStream);
 
-        // Determine the image's content type from its extension.
-        var contentTypeProvider = new FileExtensionContentTypeProvider();
+        var contentTypeProvider =
+            new FileExtensionContentTypeProvider();
 
         if (!contentTypeProvider.TryGetContentType(
             fullImagePath,
@@ -61,28 +71,31 @@ public class AnalysisService : IAnalysisService
             contentType = "application/octet-stream";
         }
 
-        imageContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        imageContent.Headers.ContentType =
+            new MediaTypeHeaderValue(contentType);
 
-        form.Add(imageContent,
+        form.Add(
+            imageContent,
             "image",
             Path.GetFileName(fullImagePath));
-            // Add the WAV audio if provided.
-if (audio is not null)
-{
-    var audioStream = audio.OpenReadStream();
 
-    var audioContent = new StreamContent(audioStream);
+        // 4. Add the WAV audio if provided.
+        if (audio is not null)
+        {
+            var audioStream = audio.OpenReadStream();
 
-    audioContent.Headers.ContentType =
-        new MediaTypeHeaderValue("audio/wav");
+            var audioContent = new StreamContent(audioStream);
 
-    form.Add(
-        audioContent,
-        "audio",
-        audio.FileName);
-}
+            audioContent.Headers.ContentType =
+                new MediaTypeHeaderValue("audio/wav");
 
-        // 4. Send the image to FastAPI.
+            form.Add(
+                audioContent,
+                "audio",
+                audio.FileName);
+        }
+
+        // 5. Send the image, optional audio, and language to FastAPI.
         using var response = await _httpClient.PostAsync(
             "analyze",
             form);
@@ -90,11 +103,11 @@ if (audio is not null)
         // Throw an exception if FastAPI returns an unsuccessful status.
         response.EnsureSuccessStatusCode();
 
-        // 5. Receive the ZIP response.
+        // 6. Receive the ZIP response.
         await using var zipStream =
             await response.Content.ReadAsStreamAsync();
 
-        // 6. Pass the ZIP to FrameService.
+        // 7. Pass the ZIP to FrameService.
         return await _frameService.ProcessAnalysisResultAsync(
             frameId,
             zipStream);

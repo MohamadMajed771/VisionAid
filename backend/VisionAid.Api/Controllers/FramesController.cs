@@ -1,10 +1,11 @@
 
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using VisionAid.Api.DTOs.Frames;
 using VisionAid.Api.Services.Interfaces;
-
+using VisionAid.Api.Data;
 namespace VisionAid.Api.Controllers;
 
 [Authorize(Roles = "User")]
@@ -14,15 +15,15 @@ public class FramesController : ControllerBase
 {
     private readonly IFrameService _frameService;
     private readonly IAnalysisService _analysisService;
-
+private readonly AppDbContext _context;
     public FramesController(
         IFrameService frameService,
-        IAnalysisService analysisService)
+        IAnalysisService analysisService, AppDbContext context)
     {
         _frameService = frameService;
         _analysisService = analysisService;
+_context=context;
     }
-
 [HttpPost]
 [Consumes("multipart/form-data")]
 public async Task<IActionResult> UploadFrame(
@@ -37,17 +38,23 @@ public async Task<IActionResult> UploadFrame(
 
     try
     {
+     var preferredLanguage = await _context.Users
+    .Where(u => u.UserId == userId)
+    .Select(u => u.PreferredLanguage)
+    .FirstOrDefaultAsync();
         // Save the original image and create its database record.
         var uploadedFrame = await _frameService.UploadFrameAsync(
             sessionId,
             userId,
             request.Image);
 
-        // Send the image and optional WAV audio for analysis.
+        // Send the image, optional audio, and preferred language for analysis.
         var answer = await _analysisService.AnalyzeFrameAsync(
             uploadedFrame.FrameId,
             uploadedFrame.ImagePath,
-            request.Question);
+             preferredLanguage,
+            request.Question
+           );
 
         var response = new UploadAndAnalyzeFrameResponseDto
         {

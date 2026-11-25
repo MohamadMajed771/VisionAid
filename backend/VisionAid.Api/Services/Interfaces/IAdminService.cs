@@ -28,4 +28,6 @@ public interface IAdminService
         bool accept);
 
     Task<bool> RevokeAdminAsync(int userId, int adminId);
+Task<IReadOnlyList<AdminResponseDto>> GetAcceptedAdminsAsync(int userId);
+
 }

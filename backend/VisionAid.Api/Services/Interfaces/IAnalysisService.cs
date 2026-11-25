@@ -5,5 +5,7 @@ public interface IAnalysisService
 Task<string?> AnalyzeFrameAsync(
     int frameId,
     string originalImagePath,
-    IFormFile? audio = null);
+    string language,
+    IFormFile? audio = null
+    );
 }

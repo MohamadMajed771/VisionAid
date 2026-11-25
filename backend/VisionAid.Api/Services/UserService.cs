@@ -61,4 +61,26 @@ public class UserService : IUserService
             CreatedAt = user.CreatedAt
         };
     }
+    public async Task<string> UpdatePreferredLanguageAsync(
+    int userId,
+    string language)
+{
+    language = language.Trim().ToLower();
+
+    if (language != "en" && language != "fr")
+        throw new ArgumentException(
+            "Supported languages are English and French.");
+
+    var user = await _context.Users
+        .FirstOrDefaultAsync(u => u.UserId == userId);
+
+    if (user == null)
+        throw new KeyNotFoundException("User not found.");
+
+    user.PreferredLanguage = language;
+
+    await _context.SaveChangesAsync();
+
+    return language;
+}
 }

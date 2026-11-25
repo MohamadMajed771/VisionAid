@@ -64,7 +64,18 @@ public class UserAccessRequestsController : ControllerBase
             ? NoContent()
             : Conflict(new { message = "This access request has already been handled." });
     }
+        [HttpGet("admins")]
+public async Task<IActionResult> GetAcceptedAdmins()
+{
+    var userId = GetUserId();
 
+    if (userId == null)
+        return Unauthorized();
+
+    var admins = await _adminService.GetAcceptedAdminsAsync(userId.Value);
+
+    return Ok(admins);
+}
     private int? GetUserId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier);

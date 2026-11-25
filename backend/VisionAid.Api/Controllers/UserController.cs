@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using visionaid.api.DTOs;
 using VisionAid.Api.DTOs.Users;
 using VisionAid.Api.Services.Interfaces;
 
@@ -39,4 +40,34 @@ public class UsersController : ControllerBase
 
         return Ok(user);
     }
+    [HttpPut("preferred-language")]
+public async Task<IActionResult> UpdatePreferredLanguage(
+    [FromBody] UpdatePreferredLanguageDto request)
+{
+    var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (!int.TryParse(userIdClaim, out var userId))
+        return Unauthorized();
+
+    try
+    {
+        var language = await _userService.UpdatePreferredLanguageAsync(
+            userId,
+            request.Language);
+
+        return Ok(new
+        {
+            message = "Preferred language updated successfully.",
+            preferredLanguage = language
+        });
+    }
+    catch (ArgumentException ex)
+    {
+        return BadRequest(ex.Message);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(ex.Message);
+    }
+}
 }

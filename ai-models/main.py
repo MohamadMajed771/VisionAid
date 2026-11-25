@@ -267,10 +267,16 @@ async def analyze_uploaded_image(
 # Object Detection + Depth + OCR
 # + Llama 3.2 + Piper TTS
 # ------------------------------------
+# ------------------------------------
+# Analyze image + optional audio
+# RT-DETRv2, UniDepth, OCR, Whisper,
+# Llama 3.2, Piper, SCRFD
+# ------------------------------------
 
 @app.post("/analyze")
 async def analyze_frame_for_backend(
     image: UploadFile = File(...),
+    audio: UploadFile | None = File(None),
     question: str | None = Form(None),
     language: str = Form("en")
 ):
@@ -305,10 +311,44 @@ async def analyze_frame_for_backend(
             detail="Image file is empty."
         )
 
+    # Validate audio if provided
+    audio_bytes = None
+    audio_suffix = None
+
+    if audio is not None:
+
+        if audio.content_type not in ALLOWED_AUDIO_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Unsupported audio format. "
+                    "Use WAV, MP3, M4A, AAC, WebM or OGG."
+                )
+            )
+
+        audio_bytes = await audio.read(MAX_AUDIO_SIZE + 1)
+
+        if len(audio_bytes) > MAX_AUDIO_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Audio exceeds the 20 MB limit."
+            )
+
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Audio file is empty."
+            )
+
+        audio_suffix = ALLOWED_AUDIO_TYPES[audio.content_type]
+
     suffix = ALLOWED_IMAGE_TYPES[image.content_type]
+
     temporary_path = None
+    temporary_audio_path = None
 
     try:
+
         # Save uploaded image temporarily
         with tempfile.NamedTemporaryFile(
             delete=False,
@@ -317,7 +357,51 @@ async def analyze_frame_for_backend(
             temp_file.write(image_bytes)
             temporary_path = Path(temp_file.name)
 
-        # Run object detection, depth estimation, OCR
+        # ------------------------------------
+        # Transcribe audio with Whisper
+        # ------------------------------------
+
+        if audio_bytes is not None:
+
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=audio_suffix
+            ) as temp_audio_file:
+
+                temp_audio_file.write(audio_bytes)
+                temporary_audio_path = Path(
+                    temp_audio_file.name
+                )
+
+            print("\n===================================")
+            print(f"Transcribing audio ({language})")
+            print("===================================")
+
+            transcription_result = await run_in_threadpool(
+                transcribe_audio,
+                temporary_audio_path,
+                language
+            )
+
+            question = transcription_result["transcription"]
+
+            print("Whisper transcription:", question)
+            print(
+                "Whisper processing time:",
+                transcription_result.get(
+                    "processing_time_seconds"
+                ),
+                "seconds"
+            )
+
+        # ------------------------------------
+        # Run object detection, depth and OCR
+        # ------------------------------------
+
+        print("\n===================================")
+        print("VisionAid Image Analysis")
+        print("===================================")
+
         _, backend_result, annotated_image = (
             await run_in_threadpool(
                 analyze_image,
@@ -325,26 +409,46 @@ async def analyze_frame_for_backend(
             )
         )
 
-        # Preserve the original question and answer
+        # Store the final question (transcribed if audio was sent)
         backend_result["question"] = question
         backend_result["answer"] = None
-
-        # Record the selected language
         backend_result["language"] = language
+
+        # Store transcription details if audio was provided
+        if audio_bytes is not None:
+            backend_result["transcription"] = (
+                transcription_result["transcription"]
+            )
+
+            backend_result["transcriptionLanguage"] = (
+                transcription_result["language"]
+            )
+
+            backend_result["transcriptionProcessingTime"] = (
+                transcription_result[
+                    "processing_time_seconds"
+                ]
+            )
 
         # Audio is generated only when an answer exists
         answer_audio = None
 
-        # Generate an answer only when a question is provided
+        # ------------------------------------
+        # Generate Llama answer
+        # ------------------------------------
+
         if question and question.strip():
 
-            print("\nGenerating VisionAid answer with Llama 3.2...")
+            print(
+                "\nGenerating VisionAid answer "
+                "with Llama 3.2..."
+            )
 
-            # Preserve the user's original question
             llm_question = question.strip()
 
-            # Request an answer in the selected language
+            # French instructions
             if language == "fr":
+
                 llm_question = (
                     "Réponds uniquement en français. "
                     "Utilise des phrases courtes, claires et naturelles. "
@@ -355,7 +459,9 @@ async def analyze_frame_for_backend(
                     + question.strip()
                 )
 
+            # English instructions
             else:
+
                 llm_question = (
                     "Answer only in English. "
                     "Use short, clear and natural sentences. "
@@ -373,16 +479,24 @@ async def analyze_frame_for_backend(
                 backend_result.get("ocrResults", [])
             )
 
-            if llm_result is not None and llm_result.get("answer"):
+            if (
+                llm_result is not None
+                and llm_result.get("answer")
+            ):
 
-                backend_result["answer"] = llm_result["answer"]
+                backend_result["answer"] = (
+                    llm_result["answer"]
+                )
 
                 print(
                     "Llama 3.2 answer:",
                     backend_result["answer"]
                 )
 
-                # Generate speech in the selected language
+                # ------------------------------------
+                # Generate Piper TTS
+                # ------------------------------------
+
                 print(
                     f"\nGenerating Piper TTS audio ({language})..."
                 )
@@ -439,23 +553,37 @@ async def analyze_frame_for_backend(
                 )
 
             else:
+
                 print(
                     "WARNING: Llama 3.2 returned no usable answer."
                 )
 
+        else:
+
+            print(
+                "No question provided. "
+                "Skipping Llama answer generation."
+            )
+
+        # ------------------------------------
         # Preserve original uploaded filename
+        # ------------------------------------
+
         backend_result["image"] = (
             (image.filename or "image.jpg")
             .replace("\\", "/")
             .split("/")[-1]
         )
 
-        # Create annotated image in memory
+        # ------------------------------------
+        # Face privacy masking
+        # ------------------------------------
+
         image_buffer = io.BytesIO()
 
-        # Detect faces from the original image and
-        # mask them on the annotated image.
-        print("\nApplying SCRFD face privacy masking...")
+        print(
+            "\nApplying SCRFD face privacy masking..."
+        )
 
         with Image.open(temporary_path) as source_image:
             original_image = source_image.convert("RGB")
@@ -481,7 +609,10 @@ async def analyze_frame_for_backend(
             quality=90
         )
 
+        # ------------------------------------
         # Create ZIP in memory
+        # ------------------------------------
+
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(
@@ -508,6 +639,7 @@ async def analyze_frame_for_backend(
 
             # Spoken answer
             if answer_audio is not None:
+
                 archive.writestr(
                     "answer.wav",
                     answer_audio
@@ -515,7 +647,10 @@ async def analyze_frame_for_backend(
 
         zip_buffer.seek(0)
 
+        # ------------------------------------
         # Return ZIP to ASP.NET Core
+        # ------------------------------------
+
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
@@ -526,6 +661,7 @@ async def analyze_frame_for_backend(
         )
 
     except Exception as e:
+
         print("Backend analysis error:", e)
         traceback.print_exc()
 
@@ -535,15 +671,29 @@ async def analyze_frame_for_backend(
         )
 
     finally:
+
         await image.close()
 
+        if audio is not None:
+            await audio.close()
+
+        # Remove temporary image
         if temporary_path is not None:
+
             try:
                 os.remove(temporary_path)
+
             except FileNotFoundError:
                 pass
 
+        # Remove temporary audio
+        if temporary_audio_path is not None:
 
+            try:
+                os.remove(temporary_audio_path)
+
+            except FileNotFoundError:
+                pass
 # ------------------------------------
 # Transcribe audio
 # Whisper Small
@@ -551,7 +701,8 @@ async def analyze_frame_for_backend(
 
 @app.post("/transcribe-audio")
 async def transcribe_uploaded_audio(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    language: str = Form("en")
 ):
 
     if file.content_type not in ALLOWED_AUDIO_TYPES:
@@ -561,6 +712,15 @@ async def transcribe_uploaded_audio(
                 "Unsupported audio format. "
                 "Use WAV, MP3, M4A, AAC, WebM or OGG."
             )
+        )
+
+    # Validate language
+    language = language.strip().lower()
+
+    if language not in {"en", "fr", "ar"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Supported languages are English, French and Arabic."
         )
 
     audio_bytes = await file.read(MAX_AUDIO_SIZE + 1)
@@ -589,12 +749,13 @@ async def transcribe_uploaded_audio(
             temporary_path = Path(temp_file.name)
 
         print("\n===================================")
-        print("Received audio for transcription")
+        print(f"Received audio for transcription ({language})")
         print("===================================")
 
         result = await run_in_threadpool(
             transcribe_audio,
-            temporary_path
+            temporary_path,
+            language
         )
 
         question = result["transcription"]

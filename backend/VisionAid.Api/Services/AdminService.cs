@@ -326,5 +326,22 @@ private static AdminResponseDto MapToResponse(
                 })
                 .ToList()
         };
+
+        
     }
+
+    public async Task<IReadOnlyList<AdminResponseDto>> GetAcceptedAdminsAsync(int userId)
+{
+    return await _context.AdminAccessRequests
+        .Where(request =>
+            request.UserId == userId &&
+            request.Status == "Accepted")
+        .Select(request => new AdminResponseDto
+        {
+            AdminId = request.Admin.AdminId,
+            Name = request.Admin.Name,
+            Email = request.Admin.Email
+        })
+        .ToListAsync();
+}
 }
