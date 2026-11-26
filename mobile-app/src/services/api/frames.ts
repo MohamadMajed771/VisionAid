@@ -41,7 +41,7 @@ export const framesApi = {
       );
     }
     return apiRequest<FrameAnalysisResponse>(
-      `/api/sessions/${sessionId}/frames`,
+      `/api/analyse/frame`,
       {
         method: "POST",
         body: formData,
@@ -79,7 +79,7 @@ export const framesApi = {
     }
 
     return apiRequest<FrameAnalysisResponse>(
-      `/api/sessions/${sessionId}/frames`,
+      `/api/analyse/frame`,
       {
         method: "POST",
         body: formData,
