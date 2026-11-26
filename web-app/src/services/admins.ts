@@ -7,6 +7,7 @@ import type {
   AdminUserResponse,
   AccessRequestResponse,
   SessionResponse,
+  SessionHistoryPage,
 } from "../types/admin";
 
 export const adminApi = {
@@ -58,4 +59,18 @@ export const adminApi = {
       token
     );
   },
+
+  getSessionFrames(
+    token: string,
+    userId: number,
+    sessionId: number,
+    page = 1
+  ) {
+    return apiRequest<SessionHistoryPage>(
+      `/admins/users/${userId}/sessions/${sessionId}/frames?page=${page}&pageSize=10`,
+      {},
+      token
+    );
+  }
+
 };

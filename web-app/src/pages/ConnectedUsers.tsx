@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { adminApi } from "../services/admins";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import type { AdminUserResponse } from "../types/admin";
-import { formatBeirutDate } from "../utils/date";
+
+import { Link } from "react-router";
 
 export default function ConnectedUsers() {
   const { admin } = useAdminAuth();
@@ -53,17 +54,10 @@ export default function ConnectedUsers() {
           <section key={user.userId} className="panel">
             <h2>{user.name}</h2>
             <p>{user.email}</p>
-            <p>Sessions: {user.sessions.length}</p>
-
-            {user.sessions.map((session) => (
-              <div key={session.sessionId} className="session-row">
-                <span>Session #{session.sessionId}</span>
-                <span>{session.status}</span>
-                <span>
-                  {formatBeirutDate(session.startedAt)}
-                </span>
-              </div>
-            ))}
+           
+           <Link to={`/users/${user.userId}/sessions`}>
+            View sessions
+          </Link>
           </section>
         ))
       )}

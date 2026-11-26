@@ -6,6 +6,7 @@ import {
   StyleSheet,
 } from "react-native";
 
+
 import { router } from "expo-router";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -34,7 +35,16 @@ export default function HomeScreen() {
           Start Assistance
         </Text>
       </Pressable>
-
+      <Pressable
+      onPress={() => router.push("/monitoring-requests")}
+        style={styles.monitorButton}
+        accessibilityRole="button"
+        accessibilityLabel="Monitoring Requests"
+      >
+        <Text style={styles.buttonText}>
+          Monitoring Requests
+        </Text>
+      </Pressable>
       <Pressable
         style={styles.logoutButton}
         onPress={logout}
@@ -50,6 +60,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+    monitorButton: {
+  backgroundColor: "#0F766E",
+  padding: 22,
+  borderRadius: 14,
+  alignItems: "center",
+},
   container: {
     flex: 1,
     justifyContent: "center",

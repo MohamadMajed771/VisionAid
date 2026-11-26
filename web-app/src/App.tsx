@@ -10,6 +10,8 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import AccessRequests from "./pages/AccessRequests";
 import ConnectedUsers from "./pages/ConnectedUsers";
+import UserSessions from "./pages/UserSessions";
+import SessionFrames from "./pages/SessionFrames";
 
 export default function App() {
   return (
@@ -26,6 +28,12 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/requests" element={<AccessRequests />} />
           <Route path="/users" element={<ConnectedUsers />} />
+          <Route path="/users/:userId/sessions" 
+            element={<UserSessions />}/>
+
+          <Route path="/users/:userId/sessions/:sessionId" 
+            element={<SessionFrames />}>
+           </Route>
         </Route>
       </Route>
 

@@ -12,7 +12,7 @@ const STORAGE_KEY = "visionaid_monitor_session";
 
 function getStoredAdmin(): AdminAuthResponse | null {
   try {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return null;
 
     const admin = JSON.parse(saved) as AdminAuthResponse;
@@ -21,13 +21,13 @@ function getStoredAdmin(): AdminAuthResponse | null {
       !admin.token ||
       Date.parse(admin.expiresAt) <= Date.now()
     ) {
-      sessionStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY);
       return null;
     }
 
     return admin;
   } catch {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }
@@ -40,7 +40,7 @@ export function AdminAuthProvider({
   const [admin, setAdmin] = useState(getStoredAdmin);
 
   function saveAdmin(response: AdminAuthResponse) {
-    sessionStorage.setItem(
+    localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify(response)
     );
@@ -58,7 +58,7 @@ export function AdminAuthProvider({
   }
 
   function logout() {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setAdmin(null);
   }
 
