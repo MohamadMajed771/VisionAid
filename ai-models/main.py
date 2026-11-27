@@ -1,4 +1,3 @@
-
 import io
 import json
 import os
@@ -13,12 +12,18 @@ from PIL import Image
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+
+from alert_generator import (
+    generate_automatic_alert,
+    prepare_alert_evidence
+)
 
 from vision_analyzer import (
     analyze_image,
     load_detector,
-    load_unidepth
+    load_unidepth,
+    check_image_quality
 )
 
 from whisper_transcriber import (
@@ -28,13 +33,8 @@ from whisper_transcriber import (
 
 from llama32_response_generator import (
     load_model as load_llama,
-    generate_answer
-)
-
-from piper_tts_service import (
-    load_tts_models,
-    warmup_tts_models,
-    synthesize_speech
+    generate_answer,
+    generate_alert
 )
 
 from scrfd_face_detector import (
@@ -98,14 +98,6 @@ async def lifespan(app: FastAPI):
 
     # Preload Llama 3.2 through Ollama
     await run_in_threadpool(load_llama)
-
-    # Load Piper English and French voices once
-    print("\nLoading Piper TTS models...")
-    await run_in_threadpool(load_tts_models)
-
-    # Warm up Piper voices
-    print("\nWarming up Piper TTS models...")
-    await run_in_threadpool(warmup_tts_models)
 
     # Warm up image analysis models
     print("\nWarming up VisionAid image models...")
@@ -262,15 +254,12 @@ async def analyze_uploaded_image(
                 pass
 
 
-# ------------------------------------
-# Analyze frame for ASP.NET backend
-# Object Detection + Depth + OCR
-# + Llama 3.2 + Piper TTS
-# ------------------------------------
+
 # ------------------------------------
 # Analyze image + optional audio
-# RT-DETRv2, UniDepth, OCR, Whisper,
-# Llama 3.2, Piper, SCRFD
+# RT-DETRv2 + UniDepth + PaddleOCR
+# Whisper + Automatic Alerts + Llama 3.2
+# Image Quality + Reliability + SCRFD
 # ------------------------------------
 
 @app.post("/analyze")
@@ -281,81 +270,97 @@ async def analyze_frame_for_backend(
     language: str = Form("en")
 ):
 
-    # Validate selected language
-    language = language.strip().lower()
-
-    if language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(
-            status_code=400,
-            detail="Supported languages are 'en' and 'fr'."
-        )
-
-    # Validate image format
-    if image.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Only JPEG and PNG images are allowed."
-        )
-
-    image_bytes = await image.read(MAX_IMAGE_SIZE + 1)
-
-    if len(image_bytes) > MAX_IMAGE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail="Image exceeds the 10 MB limit."
-        )
-
-    if not image_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail="Image file is empty."
-        )
-
-    # Validate audio if provided
-    audio_bytes = None
-    audio_suffix = None
-
-    if audio is not None:
-
-        if audio.content_type not in ALLOWED_AUDIO_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Unsupported audio format. "
-                    "Use WAV, MP3, M4A, AAC, WebM or OGG."
-                )
-            )
-
-        audio_bytes = await audio.read(MAX_AUDIO_SIZE + 1)
-
-        if len(audio_bytes) > MAX_AUDIO_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail="Audio exceeds the 20 MB limit."
-            )
-
-        if not audio_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail="Audio file is empty."
-            )
-
-        audio_suffix = ALLOWED_AUDIO_TYPES[audio.content_type]
-
-    suffix = ALLOWED_IMAGE_TYPES[image.content_type]
-
     temporary_path = None
     temporary_audio_path = None
+    transcription_result = None
 
     try:
 
+        # ------------------------------------
+        # Validate selected language
+        # ------------------------------------
+
+        language = language.strip().lower()
+
+        if language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail="Supported languages are 'en' and 'fr'."
+            )
+
+        # ------------------------------------
+        # Validate image
+        # ------------------------------------
+
+        if image.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Only JPEG and PNG images are allowed."
+            )
+
+        image_bytes = await image.read(MAX_IMAGE_SIZE + 1)
+
+        if len(image_bytes) > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Image exceeds the 10 MB limit."
+            )
+
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Image file is empty."
+            )
+
+        # ------------------------------------
+        # Validate optional audio
+        # ------------------------------------
+
+        audio_bytes = None
+        audio_suffix = None
+
+        if audio is not None:
+
+            if audio.content_type not in ALLOWED_AUDIO_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Unsupported audio format. "
+                        "Use WAV, MP3, M4A, AAC, WebM or OGG."
+                    )
+                )
+
+            audio_bytes = await audio.read(MAX_AUDIO_SIZE + 1)
+
+            if len(audio_bytes) > MAX_AUDIO_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Audio exceeds the 20 MB limit."
+                )
+
+            if not audio_bytes:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Audio file is empty."
+                )
+
+            audio_suffix = ALLOWED_AUDIO_TYPES[
+                audio.content_type
+            ]
+
+        suffix = ALLOWED_IMAGE_TYPES[image.content_type]
+
+        # ------------------------------------
         # Save uploaded image temporarily
+        # ------------------------------------
+
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=suffix
         ) as temp_file:
-            temp_file.write(image_bytes)
+
             temporary_path = Path(temp_file.name)
+            temp_file.write(image_bytes)
 
         # ------------------------------------
         # Transcribe audio with Whisper
@@ -368,10 +373,11 @@ async def analyze_frame_for_backend(
                 suffix=audio_suffix
             ) as temp_audio_file:
 
-                temp_audio_file.write(audio_bytes)
                 temporary_audio_path = Path(
                     temp_audio_file.name
                 )
+
+                temp_audio_file.write(audio_bytes)
 
             print("\n===================================")
             print(f"Transcribing audio ({language})")
@@ -383,9 +389,27 @@ async def analyze_frame_for_backend(
                 language
             )
 
-            question = transcription_result["transcription"]
+            transcribed_question = (
+                transcription_result["transcription"].strip()
+            )
 
-            print("Whisper transcription:", question)
+            # Use the transcribed question
+            if transcribed_question:
+                question = transcribed_question
+
+            # If no speech was recognized and no written
+            # question exists, ask the client to retry
+            elif not question or not question.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "No speech was recognized. "
+                        "Please record your question again."
+                    )
+                )
+
+            print("Whisper transcription:", transcribed_question)
+
             print(
                 "Whisper processing time:",
                 transcription_result.get(
@@ -395,6 +419,38 @@ async def analyze_frame_for_backend(
             )
 
         # ------------------------------------
+        # Check whether the user asked a question
+        # ------------------------------------
+
+        has_question = bool(
+            question and question.strip()
+        )
+
+        # ------------------------------------
+        # Image quality check
+        # ------------------------------------
+
+        image_quality = await run_in_threadpool(
+            check_image_quality,
+            temporary_path
+        )
+
+        is_blurry = image_quality["is_blurry"]
+
+        # Discard blurry frames without a question
+        if is_blurry and not has_question:
+
+            print("\nBlurry image without a question.")
+            print("Discarding frame. Returning HTTP 204.")
+
+            return Response(status_code=204)
+
+        if is_blurry and has_question:
+
+            print("\nBlurry image with a user question.")
+            print("Continuing analysis with uncertainty.")
+
+        # ------------------------------------
         # Run object detection, depth and OCR
         # ------------------------------------
 
@@ -402,20 +458,29 @@ async def analyze_frame_for_backend(
         print("VisionAid Image Analysis")
         print("===================================")
 
-        _, backend_result, annotated_image = (
+        combined_result, backend_result, annotated_image = (
             await run_in_threadpool(
                 analyze_image,
                 temporary_path
             )
         )
 
-        # Store the final question (transcribed if audio was sent)
-        backend_result["question"] = question
+        # Preserve the final question
+        backend_result["question"] = (
+            question.strip()
+            if question and question.strip()
+            else None
+        )
+
         backend_result["answer"] = None
         backend_result["language"] = language
 
-        # Store transcription details if audio was provided
-        if audio_bytes is not None:
+        # ------------------------------------
+        # Store Whisper transcription information
+        # ------------------------------------
+
+        if transcription_result is not None:
+
             backend_result["transcription"] = (
                 transcription_result["transcription"]
             )
@@ -425,23 +490,170 @@ async def analyze_frame_for_backend(
             )
 
             backend_result["transcriptionProcessingTime"] = (
-                transcription_result[
-                    "processing_time_seconds"
-                ]
+                transcription_result["processing_time_seconds"]
             )
 
-        # Audio is generated only when an answer exists
-        answer_audio = None
+        # ------------------------------------
+        # Model reliability check
+        # ------------------------------------
+
+        reliability = combined_result["reliability"]
+
+        is_unreliable = reliability["is_unreliable"]
+
+        uncertain_result = is_blurry or is_unreliable
+
+        # Discard unreliable frames without a question
+        if uncertain_result and not has_question:
+
+            print("\nUnreliable frame without a question.")
+            print("Discarding frame. Returning HTTP 204.")
+
+            return Response(status_code=204)
+
+        # ------------------------------------
+        # Prepare automatic alerts
+        # ------------------------------------
+
+        alert_evidence = prepare_alert_evidence(
+            combined_result
+        )
+
+        # ------------------------------------
+        # Handle uncertain results first
+        # ------------------------------------
+
+        if uncertain_result:
+
+            print("\nGenerating uncertainty message.")
+
+            if language == "fr":
+
+                if is_blurry:
+
+                    backend_result["answer"] = (
+                        "L'image n'est pas assez nette. "
+                        "Je ne peux pas répondre avec certitude. "
+                        "Veuillez réessayer."
+                    )
+
+                else:
+
+                    backend_result["answer"] = (
+                        "Je ne suis pas certain des résultats. "
+                        "Veuillez réessayer."
+                    )
+
+            else:
+
+                if is_blurry:
+
+                    backend_result["answer"] = (
+                        "The image is not clear enough. "
+                        "I cannot answer with confidence. "
+                        "Please try again."
+                    )
+
+                else:
+
+                    backend_result["answer"] = (
+                        "I am not confident about the results. "
+                        "Please try again."
+                    )
+
+            print(backend_result["answer"])
+
+        # ------------------------------------
+        # Automatic alerts
+        # ------------------------------------
+
+        elif alert_evidence is not None:
+
+            backend_result["question"] = "alert"
+
+            print("\n===================================")
+            print("Automatic VisionAid Alert Detected")
+            print("===================================")
+
+            # Generate a deterministic fallback alert
+            fallback_alert = generate_automatic_alert(
+                combined_result,
+                language
+            )
+
+            backend_result["answer"] = fallback_alert
+
+            obstacle = alert_evidence["nearby_obstacle"]
+
+            # Check whether the obstacle is critically close
+            is_critical = (
+                obstacle is not None
+                and obstacle.get("level") == "critical"
+            )
+
+            if is_critical:
+
+                # Avoid waiting for Llama in critical situations
+                print("CRITICAL OBSTACLE DETECTED")
+                print("Using immediate Python warning.")
+
+            else:
+
+                print(
+                    "Generating automatic alert with Llama 3.2..."
+                )
+
+                try:
+
+                    alert_result = await run_in_threadpool(
+                        generate_alert,
+                        alert_evidence["detected_objects"],
+                        alert_evidence["important_ocr"],
+                        alert_evidence["nearby_obstacle"],
+                        language
+                    )
+
+                except Exception as error:
+
+                    print("Llama alert generation failed:", error)
+                    alert_result = None
+
+                # Use only one alert message
+                if alert_result and alert_result.get("answer"):
+
+                    backend_result["answer"] = (
+                        alert_result["answer"]
+                    )
+
+                    print(
+                        "Alert generated successfully by Llama."
+                    )
+
+                    print(
+                        "LLM alert processing time:",
+                        alert_result.get("processing_time_seconds"),
+                        "seconds"
+                    )
+
+                else:
+
+                    print(
+                        "WARNING: Llama alert unavailable. "
+                        "Using Python fallback."
+                    )
+
+            print("\nFinal automatic alert:")
+            print(backend_result["answer"])
+            print("===================================")
 
         # ------------------------------------
         # Generate Llama answer
         # ------------------------------------
 
-        if question and question.strip():
+        elif question and question.strip():
 
             print(
-                "\nGenerating VisionAid answer "
-                "with Llama 3.2..."
+                "\nGenerating VisionAid answer with Llama 3.2..."
             )
 
             llm_question = question.strip()
@@ -493,24 +705,6 @@ async def analyze_frame_for_backend(
                     backend_result["answer"]
                 )
 
-                # ------------------------------------
-                # Generate Piper TTS
-                # ------------------------------------
-
-                print(
-                    f"\nGenerating Piper TTS audio ({language})..."
-                )
-
-                answer_audio = await run_in_threadpool(
-                    synthesize_speech,
-                    backend_result["answer"],
-                    language
-                )
-
-                print(
-                    "Piper TTS generated answer.wav successfully."
-                )
-
                 # Print LLM performance statistics
                 print(
                     "LLM processing time:",
@@ -560,10 +754,7 @@ async def analyze_frame_for_backend(
 
         else:
 
-            print(
-                "No question provided. "
-                "Skipping Llama answer generation."
-            )
+            print("\nNo question and no automatic alert.")
 
         # ------------------------------------
         # Preserve original uploaded filename
@@ -581,11 +772,14 @@ async def analyze_frame_for_backend(
 
         image_buffer = io.BytesIO()
 
-        print(
-            "\nApplying SCRFD face privacy masking..."
-        )
+        # ------------------------------------
+        # SCRFD face privacy masking
+        # ------------------------------------
+
+        print("\nApplying SCRFD face privacy masking...")
 
         with Image.open(temporary_path) as source_image:
+
             original_image = source_image.convert("RGB")
 
         annotated_image, faces_masked = await run_in_threadpool(
@@ -637,14 +831,6 @@ async def analyze_frame_for_backend(
                 image_buffer.getvalue()
             )
 
-            # Spoken answer
-            if answer_audio is not None:
-
-                archive.writestr(
-                    "answer.wav",
-                    answer_audio
-                )
-
         zip_buffer.seek(0)
 
         # ------------------------------------
@@ -659,6 +845,9 @@ async def analyze_frame_for_backend(
                     'attachment; filename="analysis.zip"'
             }
         )
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -691,6 +880,12 @@ async def analyze_frame_for_backend(
 
             try:
                 os.remove(temporary_audio_path)
+
+            except FileNotFoundError:
+                pass
+
+
+
 
             except FileNotFoundError:
                 pass
