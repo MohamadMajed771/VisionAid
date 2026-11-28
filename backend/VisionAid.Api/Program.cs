@@ -46,6 +46,8 @@ builder.Services
         };
     });
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<MonitoringImageService>();
+
 builder.Services.AddAuthorization();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySQL(connectionString));

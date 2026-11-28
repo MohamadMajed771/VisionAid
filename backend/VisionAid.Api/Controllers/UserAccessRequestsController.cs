@@ -1,4 +1,3 @@
-
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +13,8 @@ public class UserAccessRequestsController : ControllerBase
 {
     private readonly IAdminService _adminService;
 
-    public UserAccessRequestsController(IAdminService adminService)
+    public UserAccessRequestsController(
+        IAdminService adminService)
     {
         _adminService = adminService;
     }
@@ -44,11 +44,16 @@ public class UserAccessRequestsController : ControllerBase
     {
         var userId = GetUserId();
 
-        var revoked = await _adminService.RevokeAdminAsync(userId.Value, adminId);
+        var revoked = await _adminService.RevokeAdminAsync(
+            userId.Value,
+            adminId);
+
         return revoked ? NoContent() : NotFound();
     }
 
-    private async Task<IActionResult> Respond(int requestId, bool accept)
+    private async Task<IActionResult> Respond(
+        int requestId,
+        bool accept)
     {
         var userId = GetUserId();
 
@@ -62,23 +67,30 @@ public class UserAccessRequestsController : ControllerBase
 
         return result.Value
             ? NoContent()
-            : Conflict(new { message = "This access request has already been handled." });
+            : Conflict(new
+            {
+                message = "This access request has already been handled."
+            });
     }
-        [HttpGet("admins")]
-public async Task<IActionResult> GetAcceptedAdmins()
-{
-    var userId = GetUserId();
 
-    if (userId == null)
-        return Unauthorized();
+    [HttpGet("admins")]
+    public async Task<IActionResult> GetAcceptedAdmins()
+    {
+        var userId = GetUserId();
 
-    var admins = await _adminService.GetAcceptedAdminsAsync(userId.Value);
+        if (userId == null)
+            return Unauthorized();
 
-    return Ok(admins);
-}
+        var admins = await _adminService.GetAcceptedAdminsAsync(
+            userId.Value);
+
+        return Ok(admins);
+    }
+
     private int? GetUserId()
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var value = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
 
         if (!int.TryParse(value, out var userId))
             return null;
@@ -86,4 +98,3 @@ public async Task<IActionResult> GetAcceptedAdmins()
         return userId;
     }
 }
-

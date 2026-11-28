@@ -148,13 +148,14 @@ var key = new SymmetricSecurityKey(
             expires: expiresAt,
             signingCredentials: credentials);
 
-        return new AuthResponse
-        {
-            UserId = user.UserId,
-            Name = user.Name,
-            Email = user.Email,
-            Token = new JwtSecurityTokenHandler().WriteToken(token),
-            ExpiresAt = expiresAt
-        };
+     return new AuthResponse
+{
+    UserId = user.UserId,
+    Name = user.Name,
+    Email = user.Email,
+    Token = new JwtSecurityTokenHandler().WriteToken(token),
+    ExpiresAt = expiresAt,
+    PreferredLanguage = user.PreferredLanguage
+};
     }
 }

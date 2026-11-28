@@ -24,6 +24,7 @@ private readonly AppDbContext _context;
         _analysisService = analysisService;
 _context=context;
     }
+    
 [HttpPost]
 [Consumes("multipart/form-data")]
 public async Task<IActionResult> UploadFrame(
@@ -37,32 +38,30 @@ public async Task<IActionResult> UploadFrame(
 
     try
     {
-     var preferredLanguage = await _context.Users
-    .Where(u => u.UserId == userId)
-    .Select(u => u.PreferredLanguage)
-    .FirstOrDefaultAsync();
-        // Save the original image and create its database record.
-        var uploadedFrame = await _frameService.UploadFrameAsync(
-            userId,
-            request.Image);
+        // 1. Get the user's preferred language.
+        var preferredLanguage = await _context.Users
+            .Where(u => u.UserId == userId)
+            .Select(u => u.PreferredLanguage)
+            .FirstOrDefaultAsync();
 
-        // Send the image, optional audio, and preferred language for analysis.
+        // 2. Send the uploaded image directly for analysis.
+        // Nothing is saved yet.
         var answer = await _analysisService.AnalyzeFrameAsync(
-            uploadedFrame.FrameId,
-            uploadedFrame.ImagePath,
-             preferredLanguage,
-            request.Question
-           );
+            userId,
+            request.Image,
+            preferredLanguage,
+            request.Question);
 
-        var response = new UploadAndAnalyzeFrameResponseDto
+        // 3. Python rejected the frame.
+        // No frame or files were created.
+        if (answer is null)
+            return NoContent();
+
+        // 4. Analysis was accepted and saved.
+        return Ok(new
         {
-            FrameId = uploadedFrame.FrameId,
-            SessionId = uploadedFrame.SessionId,
-            Answer = answer,
-            CapturedAt = uploadedFrame.CapturedAt
-        };
-
-        return Ok(response);
+            Answer = answer
+        });
     }
     catch (KeyNotFoundException ex)
     {
@@ -76,4 +75,5 @@ public async Task<IActionResult> UploadFrame(
     {
         return BadRequest(ex.Message);
     }
-}}
+}
+}

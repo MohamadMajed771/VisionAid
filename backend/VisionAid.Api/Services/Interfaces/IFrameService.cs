@@ -6,13 +6,14 @@ namespace VisionAid.Api.Services.Interfaces;
 
 public interface IFrameService
 {
-    Task<UploadFrameResponseDto> UploadFrameAsync(
-        int userId,
-        IFormFile image);
-
-    Task<string?> ProcessAnalysisResultAsync(
-        int frameId,
-        Stream zipStream);
+Task<int> ValidateFrameUploadAsync(
+    int userId,
+    IFormFile image);
+   Task<string?> ProcessAnalysisResultAsync(
+    int sessionId,
+    IFormFile originalImage,
+    DateTime capturedAt,
+    Stream zipStream);
 
     Task<SessionHistoryPageDto?> GetHistoryForAdminAsync(
         int sessionId,

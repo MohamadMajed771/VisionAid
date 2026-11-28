@@ -1,3 +1,5 @@
+
+using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.StaticFiles;
 using VisionAid.Api.Services.Interfaces;
@@ -8,64 +10,48 @@ public class AnalysisService : IAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly IFrameService _frameService;
-    private readonly IWebHostEnvironment _environment;
 
     public AnalysisService(
         HttpClient httpClient,
-        IFrameService frameService,
-        IWebHostEnvironment environment)
+        IFrameService frameService)
     {
         _httpClient = httpClient;
         _frameService = frameService;
-        _environment = environment;
     }
 
-
     public async Task<string?> AnalyzeFrameAsync(
-        int frameId,
-        string originalImagePath,
+        int userId,
+        IFormFile image,
         string language,
-        IFormFile? audio
-        )
+        IFormFile? audio)
     {
-        // 1. Resolve the original image's full path.
-        var backendFolder = Path.GetFullPath(
-            Path.Combine(_environment.ContentRootPath, ".."));
+        // 1. Validate the upload and find the user's active session.
+        // Nothing is saved to disk or database at this point.
+        var sessionId = await _frameService.ValidateFrameUploadAsync(
+            userId,
+            image);
 
-        var normalizedPath = originalImagePath
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar);
+        // Capture the time before AI analysis begins.
+        var capturedAt = DateTime.UtcNow;
 
-        var fullImagePath = Path.GetFullPath(
-            Path.Combine(backendFolder, normalizedPath));
+        // 2. Open the uploaded image directly from memory/request storage.
+        await using var imageStream = image.OpenReadStream();
 
-        if (!File.Exists(fullImagePath))
-            throw new FileNotFoundException(
-                "Original image was not found.",
-                fullImagePath);
-
-        // 2. Open the original image.
-        await using var imageStream = new FileStream(
-            fullImagePath,
-            FileMode.Open,
-            FileAccess.Read);
-
-        // 3. Prepare the multipart/form-data request.
+        // 3. Prepare multipart/form-data.
         using var form = new MultipartFormDataContent();
 
-        // Add the preferred language.
         form.Add(
             new StringContent(language),
             "language");
 
-        // Add the image.
+        // Add image.
         var imageContent = new StreamContent(imageStream);
 
         var contentTypeProvider =
             new FileExtensionContentTypeProvider();
 
         if (!contentTypeProvider.TryGetContentType(
-            fullImagePath,
+            image.FileName,
             out var contentType))
         {
             contentType = "application/octet-stream";
@@ -77,13 +63,12 @@ public class AnalysisService : IAnalysisService
         form.Add(
             imageContent,
             "image",
-            Path.GetFileName(fullImagePath));
+            image.FileName);
 
-        // 4. Add the WAV audio if provided.
-        if (audio is not null)
+        // 4. Add optional audio.
+        if (audio is not null && audio.Length > 0)
         {
             var audioStream = audio.OpenReadStream();
-
             var audioContent = new StreamContent(audioStream);
 
             audioContent.Headers.ContentType =
@@ -95,21 +80,32 @@ public class AnalysisService : IAnalysisService
                 audio.FileName);
         }
 
-        // 5. Send the image, optional audio, and language to FastAPI.
+        // 5. Send the request to Python.
         using var response = await _httpClient.PostAsync(
             "analyze",
             form);
 
-        // Throw an exception if FastAPI returns an unsuccessful status.
+        // 6. Python rejected the frame (e.g. blurry image,
+        //    or no required question).
+        // Save absolutely nothing.
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+
+        // Throw for other unsuccessful responses.
         response.EnsureSuccessStatusCode();
 
-        // 6. Receive the ZIP response.
+        // 7. Successful response: receive ZIP.
         await using var zipStream =
             await response.Content.ReadAsStreamAsync();
 
-        // 7. Pass the ZIP to FrameService.
+        // 8. FrameService now saves the original image,
+        //    annotated image, JSON, and database records.
         return await _frameService.ProcessAnalysisResultAsync(
-            frameId,
+            sessionId,
+            image,
+            capturedAt,
             zipStream);
     }
 }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VisionAid.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+427170a748b8cbcab18bac695ef6d16509bbbec8")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1827a0eba8fc38fb7d9f009f0d743478306b953b")]
 [assembly: System.Reflection.AssemblyProductAttribute("VisionAid.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VisionAid.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

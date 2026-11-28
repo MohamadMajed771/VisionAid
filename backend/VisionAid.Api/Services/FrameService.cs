@@ -25,7 +25,7 @@ public class FrameService : IFrameService
         _environment = environment;
     }
 
-    public async Task<UploadFrameResponseDto> UploadFrameAsync(
+public async Task<int> ValidateFrameUploadAsync(
     int userId,
     IFormFile image)
 {
@@ -39,197 +39,172 @@ public class FrameService : IFrameService
         throw new KeyNotFoundException(
             "No active session found.");
 
-    // 2. Validate the uploaded image.
+    // 2. Validate the image.
     if (image is null || image.Length == 0)
         throw new ArgumentException(
             "The uploaded image is empty.");
 
-    // 3. Get Backend folder (parent of Visionaid.Api).
+    // 3. Return the active session ID.
+    // Nothing is saved to disk or database here.
+    return session.SessionId;
+}
+
+
+public async Task<string?> ProcessAnalysisResultAsync(
+    int sessionId,
+    IFormFile originalImage,
+    DateTime capturedAt,
+    Stream zipStream)
+{
+    // 1. Verify the session exists.
+    var session = await _context.StreamSessions
+        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+    if (session is null)
+        throw new KeyNotFoundException("Session not found.");
+
+    // 2. Resolve the backend folder.
     var backendFolder = Path.GetFullPath(
         Path.Combine(_environment.ContentRootPath, ".."));
 
-    // 4. Create original images folder.
-    var uploadFolder = Path.Combine(
-        backendFolder,
-        "uploads",
-        "frames");
+    // 3. Create upload folders.
+    var originalFolder = Path.Combine(
+        backendFolder, "uploads", "frames");
 
-    Directory.CreateDirectory(uploadFolder);
+    var analyzedImagesFolder = Path.Combine(
+        backendFolder, "uploads", "analyzed-frames");
 
-    // 5. Generate a unique filename.
-    var capturedAt = DateTime.UtcNow;
+    var analysisFolder = Path.Combine(
+        backendFolder, "uploads", "analysis");
 
-    var extension = Path.GetExtension(image.FileName);
+    Directory.CreateDirectory(originalFolder);
+    Directory.CreateDirectory(analyzedImagesFolder);
+    Directory.CreateDirectory(analysisFolder);
+
+    // 4. Generate a shared filename.
+    var extension = Path.GetExtension(originalImage.FileName);
+
+    if (string.IsNullOrWhiteSpace(extension))
+        extension = ".jpg";
 
     var fileName =
         $"{capturedAt:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}" +
         extension;
 
-    // 6. Save original image.
-    var fullPath = Path.Combine(uploadFolder, fileName);
+    var fileNameWithoutExtension =
+        Path.GetFileNameWithoutExtension(fileName);
 
-    await using (var stream = new FileStream(
-        fullPath,
+    var analyzedImageFileName =
+        $"{fileNameWithoutExtension}.jpg";
+
+    var jsonFileName =
+        $"{fileNameWithoutExtension}.json";
+
+    // 5. Build full paths.
+    var originalImageFullPath = Path.Combine(
+        originalFolder, fileName);
+
+    var analyzedImageFullPath = Path.Combine(
+        analyzedImagesFolder, analyzedImageFileName);
+
+    var jsonFullPath = Path.Combine(
+        analysisFolder, jsonFileName);
+
+    // 6. Open ZIP returned by Python.
+    using var archive = new ZipArchive(
+        zipStream,
+        ZipArchiveMode.Read,
+        leaveOpen: true);
+
+    var imageEntry = archive.GetEntry("annotated.jpg");
+    var jsonEntry = archive.GetEntry("analysis.json");
+
+    if (imageEntry is null || jsonEntry is null)
+    {
+        throw new InvalidDataException(
+            "The ZIP must contain annotated.jpg and analysis.json.");
+    }
+
+    // 7. Deserialize analysis JSON before saving anything.
+    FrameAnalysisResultDto? analysisResult;
+
+    await using (var jsonEntryStream = jsonEntry.Open())
+    {
+        analysisResult =
+            await JsonSerializer.DeserializeAsync<FrameAnalysisResultDto>(
+                jsonEntryStream,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+    }
+
+    if (analysisResult is null)
+        throw new InvalidDataException(
+            "Could not deserialize the analysis JSON.");
+
+    // 8. Save original image.
+    await using (var originalStream = originalImage.OpenReadStream())
+    await using (var fileStream = new FileStream(
+        originalImageFullPath,
         FileMode.CreateNew,
         FileAccess.Write))
     {
-        await image.CopyToAsync(stream);
+        await originalStream.CopyToAsync(fileStream);
     }
 
-    // 7. Store relative path.
-    var relativePath = Path.Combine(
-        "uploads",
-        "frames",
-        fileName);
+    // 9. Save annotated image.
+    await using (var imageEntryStream = imageEntry.Open())
+    await using (var fileStream = new FileStream(
+        analyzedImageFullPath,
+        FileMode.Create,
+        FileAccess.Write))
+    {
+        await imageEntryStream.CopyToAsync(fileStream);
+    }
 
+    // 10. Save analysis JSON.
+    await using (var jsonEntryStream = jsonEntry.Open())
+    await using (var fileStream = new FileStream(
+        jsonFullPath,
+        FileMode.Create,
+        FileAccess.Write))
+    {
+        await jsonEntryStream.CopyToAsync(fileStream);
+    }
+
+    // 11. Build relative paths.
+    var originalImageRelativePath = Path.Combine(
+        "uploads", "frames", fileName);
+
+    var analyzedImageRelativePath = Path.Combine(
+        "uploads", "analyzed-frames", analyzedImageFileName);
+
+    var jsonRelativePath = Path.Combine(
+        "uploads", "analysis", jsonFileName);
+
+    // 12. Create Frame only after successful analysis.
     var frame = new Frame
     {
-        SessionId = session.SessionId,
-        ImagePath = relativePath,
+        SessionId = sessionId,
+        ImagePath = originalImageRelativePath,
         CapturedAt = capturedAt,
         CreatedAt = DateTime.UtcNow
     };
 
-    // 8. Save frame to database.
     _context.Frames.Add(frame);
     await _context.SaveChangesAsync();
 
-    // 9. Return response.
-    return new UploadFrameResponseDto
-    {
-        FrameId = frame.FrameId,
-        SessionId = frame.SessionId,
-        ImagePath = frame.ImagePath,
-        CapturedAt = frame.CapturedAt
-    };
+    // 13. Save analysis and related DB data.
+    await SaveAnalysisToDatabaseAsync(
+        frame,
+        analysisResult,
+        analyzedImageRelativePath,
+        jsonRelativePath);
+
+    // 14. Return answer for Android TTS.
+    return analysisResult.Answer;
 }
-
-    public async Task<string?> ProcessAnalysisResultAsync(
-        int frameId,
-        Stream zipStream)
-    {
-        // 1. Find the original frame.
-        var frame = await _context.Frames
-            .FirstOrDefaultAsync(f => f.FrameId == frameId);
-
-        if (frame is null)
-            throw new KeyNotFoundException("Frame not found.");
-
-        // 2. Get Backend folder.
-        var backendFolder = Path.GetFullPath(
-            Path.Combine(_environment.ContentRootPath, ".."));
-
-        // 3. Create folders for analysis files.
-        var analyzedImagesFolder = Path.Combine(
-            backendFolder,
-            "uploads",
-            "analyzed-frames");
-
-        var analysisFolder = Path.Combine(
-            backendFolder,
-            "uploads",
-            "analysis");
-
-        Directory.CreateDirectory(analyzedImagesFolder);
-        Directory.CreateDirectory(analysisFolder);
-
-        // 4. Use original image filename as common filename.
-        var originalFileName = Path.GetFileName(frame.ImagePath);
-
-        var fileNameWithoutExtension =
-            Path.GetFileNameWithoutExtension(originalFileName);
-
-        var analyzedImageFileName =
-            $"{fileNameWithoutExtension}.jpg";
-
-        var jsonFileName =
-            $"{fileNameWithoutExtension}.json";
-
-        var analyzedImageFullPath = Path.Combine(
-            analyzedImagesFolder,
-            analyzedImageFileName);
-
-        var jsonFullPath = Path.Combine(
-            analysisFolder,
-            jsonFileName);
-
-        // 5. Open ZIP returned by FastAPI.
-        using var archive = new ZipArchive(
-            zipStream,
-            ZipArchiveMode.Read,
-            leaveOpen: true);
-
-        var imageEntry = archive.GetEntry("annotated.jpg");
-        var jsonEntry = archive.GetEntry("analysis.json");
-
-        if (imageEntry is null || jsonEntry is null)
-        {
-            throw new InvalidDataException(
-                "The ZIP must contain annotated.jpg and analysis.json.");
-        }
-
-        // 6. Save annotated image.
-        await using (var imageStream = imageEntry.Open())
-        await using (var fileStream = new FileStream(
-            analyzedImageFullPath,
-            FileMode.Create,
-            FileAccess.Write))
-        {
-            await imageStream.CopyToAsync(fileStream);
-        }
-
-        // 7. Save original JSON file.
-        await using (var jsonStream = jsonEntry.Open())
-        await using (var fileStream = new FileStream(
-            jsonFullPath,
-            FileMode.Create,
-            FileAccess.Write))
-        {
-            await jsonStream.CopyToAsync(fileStream);
-        }
-
-        // 8. Deserialize JSON into DTO.
-        FrameAnalysisResultDto? analysisResult;
-
-        await using (var jsonStream = new FileStream(
-            jsonFullPath,
-            FileMode.Open,
-            FileAccess.Read))
-        {
-            analysisResult =
-                await JsonSerializer.DeserializeAsync<FrameAnalysisResultDto>(
-                    jsonStream,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-        }
-
-        if (analysisResult is null)
-            throw new InvalidDataException(
-                "Could not deserialize the analysis JSON.");
-
-        // 9. Convert file paths to relative paths.
-        var analyzedImageRelativePath = Path.Combine(
-            "uploads",
-            "analyzed-frames",
-            analyzedImageFileName);
-
-        var jsonRelativePath = Path.Combine(
-            "uploads",
-            "analysis",
-            jsonFileName);
-
-        // 10. Save analysis results in database.
-        await SaveAnalysisToDatabaseAsync(
-            frame,
-            analysisResult,
-            analyzedImageRelativePath,
-            jsonRelativePath);
-
-        // 11. Return generated answer for Android TTS.
-        return analysisResult.Answer;
-    }
 
     private async Task SaveAnalysisToDatabaseAsync(
         Frame frame,
@@ -400,54 +375,67 @@ if (!sessionExists)
     }
 
     foreach (var analyzedFrame in frame.AnalyzedFrames)
+{
+    // Read JSON for Question, Answer and dimensions.
+    var jsonFullPath = Path.GetFullPath(
+        Path.Combine(
+            backendFolder,
+            analyzedFrame.JsonFilePath));
+
+    FrameAnalysisResultDto? analysisResult = null;
+
+    try
     {
-        // Read JSON for Question, Answer and dimensions.
-        var jsonFullPath = Path.GetFullPath(
-            Path.Combine(
-                backendFolder,
-                analyzedFrame.JsonFilePath));
-
-        FrameAnalysisResultDto? analysisResult;
-
-        await using (var jsonStream = new FileStream(
+        await using var jsonStream = new FileStream(
             jsonFullPath,
             FileMode.Open,
-            FileAccess.Read))
-        {
-            analysisResult =
-                await JsonSerializer.DeserializeAsync<FrameAnalysisResultDto>(
-                    jsonStream,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-        }
+            FileAccess.Read);
 
-        if (analysisResult is null)
-            throw new InvalidDataException(
-                $"Could not deserialize analysis for frame {frame.FrameId}.");
-
-        history.Add(new FrameHistoryDto
-        {
-            FrameId = frame.FrameId,
-
-            // Database
-            OriginalImageName = Path.GetFileName(frame.ImagePath),
-            OriginalImagePath = frame.ImagePath,
-            CapturedAt = frame.CapturedAt,
-
-            // Database
-            AnalyzedFrameId = analyzedFrame.AnalyzedFrameId,
-            AnalyzedImagePath = analyzedFrame.AnalyzedImagePath,
-            AnalyzedAt = analyzedFrame.AnalyzedAt,
-
-            // JSON
-            ImageWidth = analysisResult.ImageWidth,
-            ImageHeight = analysisResult.ImageHeight,
-            Question = analysisResult.Question,
-            Answer = analysisResult.Answer
-        });
+        analysisResult =
+            await JsonSerializer.DeserializeAsync<FrameAnalysisResultDto>(
+                jsonStream,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
     }
+    catch (FileNotFoundException)
+    {
+        Console.WriteLine(
+            $"Analysis JSON missing for frame {frame.FrameId}.");
+    }
+    catch (DirectoryNotFoundException)
+    {
+        Console.WriteLine(
+            $"Analysis directory missing for frame {frame.FrameId}.");
+    }
+    catch (JsonException)
+    {
+        Console.WriteLine(
+            $"Invalid analysis JSON for frame {frame.FrameId}.");
+    }
+
+    history.Add(new FrameHistoryDto
+    {
+        FrameId = frame.FrameId,
+
+        // Database
+        OriginalImageName = Path.GetFileName(frame.ImagePath),
+        OriginalImagePath = frame.ImagePath,
+        CapturedAt = frame.CapturedAt,
+
+        // Database
+        AnalyzedFrameId = analyzedFrame.AnalyzedFrameId,
+        AnalyzedImagePath = analyzedFrame.AnalyzedImagePath,
+        AnalyzedAt = analyzedFrame.AnalyzedAt,
+
+        // JSON
+        ImageWidth = analysisResult?.ImageWidth,
+        ImageHeight = analysisResult?.ImageHeight,
+        Question = analysisResult?.Question,
+        Answer = analysisResult?.Answer
+    });
+}
 }
     // 9. Return paginated history.
     return new SessionHistoryPageDto
