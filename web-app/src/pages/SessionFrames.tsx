@@ -7,14 +7,20 @@ import { adminApi } from "../services/admins";
 import { formatBeirutDate } from "../utils/date";
 import type { SessionHistoryPage } from "../types/admin";
 
+import ProtectedFrameImage
+  from "../components/ProtectedFrameImage";
+
 export default function SessionFrames() {
   const { userId, sessionId } = useParams();
   const { admin } = useAdminAuth();
+
+  const token = admin?.token;
 
   const selectedUserId = Number(userId);
   const selectedSessionId = Number(sessionId);
 
   const [page, setPage] = useState(1);
+
   const [history, setHistory] =
     useState<SessionHistoryPage | null>(null);
 
@@ -28,14 +34,15 @@ export default function SessionFrames() {
     selectedSessionId > 0;
 
   useEffect(() => {
-    if (!admin || !validIds) return;
+    if (!token || !validIds) return;
 
+    const activeToken = token;
     let cancelled = false;
 
     async function loadFrames() {
       try {
         const result = await adminApi.getSessionFrames(
-          admin!.token,
+          activeToken,
           selectedUserId,
           selectedSessionId,
           page
@@ -47,6 +54,8 @@ export default function SessionFrames() {
         }
       } catch (err) {
         if (!cancelled) {
+          setHistory(null);
+
           setError(
             err instanceof Error
               ? err.message
@@ -65,12 +74,32 @@ export default function SessionFrames() {
     return () => {
       cancelled = true;
     };
-  }, [admin, selectedUserId, selectedSessionId, validIds, page]);
+  }, [
+    token,
+    selectedUserId,
+    selectedSessionId,
+    validIds,
+    page,
+  ]);
 
   function changePage(nextPage: number) {
+    if (
+      !history ||
+      nextPage < 1 ||
+      nextPage > history.totalPages ||
+      nextPage === page
+    ) {
+      return;
+    }
+
     setLoading(true);
+    setError("");
     setHistory(null);
     setPage(nextPage);
+  }
+
+  if (!token) {
+    return <p>You must be logged in.</p>;
   }
 
   if (!validIds) {
@@ -78,27 +107,36 @@ export default function SessionFrames() {
   }
 
   return (
-    <section>
-      <Link to={`/users/${selectedUserId}/sessions`}>
-        Back to sessions
+    <section className="monitor-page">
+      <Link
+        className="monitor-back"
+        to={`/users/${selectedUserId}/sessions`}
+      >
+        ← Back to sessions
       </Link>
 
       <h1>Session #{selectedSessionId}</h1>
 
       {loading && <p>Loading frame history...</p>}
-      {error && <p role="alert">{error}</p>}
+
+      {error && (
+        <p role="alert">{error}</p>
+      )}
 
       {!loading && !error && history && (
         <>
-          <p>Total original frames: {history.totalFrames}</p>
+          <p>
+            Total original frames: {history.totalFrames}
+          </p>
 
           {history.frames.length === 0 && (
             <p>No frames have been recorded.</p>
           )}
 
-          {history.frames.map((frame, index) => (
+          {history.frames.map((frame) => (
             <article
-              key={`${frame.frameId}-${frame.analyzedFrameId ?? index}`}
+                className="monitor-card"
+                key={frame.frameId}
             >
               <h3>Frame #{frame.frameId}</h3>
 
@@ -106,11 +144,38 @@ export default function SessionFrames() {
                 Captured: {formatBeirutDate(frame.capturedAt)}
               </p>
 
-              <p>
-                Original image: {frame.originalImageName}
-              </p>
+                          
+            <div className="monitor-image-grid">
+              <div>
+                <h4>Original image</h4>
+                    
+                <ProtectedFrameImage
+                  token={token}
+                  userId={selectedUserId}
+                  sessionId={selectedSessionId}
+                  frameId={frame.frameId}
+                  alt={`Original frame ${frame.frameId}`}
+                />
+              </div>
+                    
+              {frame.analyzedFrameId != null && (
+                <div>
+                  <h4>Analyzed image</h4>
+            
+                  <ProtectedFrameImage
+                    token={token}
+                    userId={selectedUserId}
+                    sessionId={selectedSessionId}
+                    frameId={frame.frameId}
+                    analyzed={true}
+                    alt={`Analyzed frame ${frame.frameId}`}
+                  />
+                </div>
+              )}
+            </div>
 
-              {frame.analyzedFrameId === null ? (
+
+              {frame.analyzedFrameId == null ? (
                 <p>Analysis not available.</p>
               ) : (
                 <>
@@ -118,17 +183,21 @@ export default function SessionFrames() {
                     Analyzed: {formatBeirutDate(frame.analyzedAt)}
                   </p>
 
-                  <p>
-                    Analyzed image: {frame.analyzedImagePath}
-                  </p>
+                  <div className="monitor-question">
+                    <strong>Question</strong>
 
-                  <p>
-                    Question: {frame.question || "None"}
-                  </p>
+                    <p>
+                      {frame.question || "No question asked."}
+                    </p>
+                  </div>
 
-                  <p>
-                    Answer: {frame.answer || "None"}
-                  </p>
+                  <div className="monitor-answer">
+                    <strong>AI Answer</strong>
+
+                    <p>
+                      {frame.answer || "No answer available."}
+                    </p>
+                  </div>
 
                   <p>
                     Dimensions: {frame.imageWidth ?? "?"}
@@ -140,29 +209,30 @@ export default function SessionFrames() {
             </article>
           ))}
 
-          <div>
-            <button
-              disabled={loading || page <= 1}
-              onClick={() => changePage(page - 1)}
-            >
-              Previous
-            </button>
+          {history.totalPages > 1 && (
+            <div className="monitor-pagination">
+              <button
+                disabled={loading || page <= 1}
+                onClick={() => changePage(page - 1)}
+              >
+                Previous
+              </button>
 
-            <span>
-              {" "} Page {history.page} of{" "}
-              {Math.max(1, history.totalPages)} {" "}
-            </span>
+              <span>
+                Page {history.page} of {history.totalPages}
+              </span>
 
-            <button
-              disabled={
-                loading ||
-                page >= history.totalPages
-              }
-              onClick={() => changePage(page + 1)}
-            >
-              Next
-            </button>
-          </div>
+              <button
+                disabled={
+                  loading ||
+                  page >= history.totalPages
+                }
+                onClick={() => changePage(page + 1)}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

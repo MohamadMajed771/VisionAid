@@ -4,13 +4,50 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  Alert,
 } from "react-native";
 
+import {
+  getRecordingPermissionsAsync,
+  requestRecordingPermissionsAsync,
+} from "expo-audio";
 
 import { router } from "expo-router";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function HomeScreen() {
+  async function startAssistance() {
+    try {
+      let permission =
+        await getRecordingPermissionsAsync();
+
+      if (!permission.granted) {
+        permission =
+          await requestRecordingPermissionsAsync();
+      }
+
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission required",
+          "Please allow microphone access in Settings."
+        );
+
+        return;
+      }
+
+      console.log("[Home] Microphone permission granted");
+
+      router.push("/assistance");
+
+    } catch (err) {
+      Alert.alert(
+        "Error",
+        err instanceof Error
+          ? err.message
+          : "Could not start Assistance."
+      );
+    }
+  }
   const { user, logout } = useAuth();
 
   return (
@@ -27,7 +64,7 @@ export default function HomeScreen() {
 
       <Pressable
         style={styles.startButton}
-        onPress={() => router.push("/assistance")}
+        onPress={() => void startAssistance()}
         accessibilityRole="button"
         accessibilityLabel="Start Assistance"
       >
@@ -45,6 +82,18 @@ export default function HomeScreen() {
           Monitoring Requests
         </Text>
       </Pressable>
+
+      <Pressable
+        style={styles.settingsButton}
+        onPress={() => router.push("/settings")}
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+      >
+        <Text style={styles.buttonText}>
+          Settings
+        </Text>
+      </Pressable>
+
       <Pressable
         style={styles.logoutButton}
         onPress={logout}
@@ -107,5 +156,11 @@ const styles = StyleSheet.create({
   logoutText: {
     color: "#B42318",
     fontSize: 17,
+  },
+  settingsButton: {
+    backgroundColor: "#475569",
+    padding: 22,
+    borderRadius: 14,
+    alignItems: "center",
   },
 });

@@ -6,7 +6,7 @@ import App from "./App";
 import { AdminAuthProvider } from "./contexts/AdminAuthProvider";
 
 import "./index.css";
-
+import "./styles/monitoring.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>

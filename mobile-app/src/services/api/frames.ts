@@ -1,26 +1,26 @@
 
-
 import { File } from "expo-file-system";
 
 import { apiRequest } from "./client";
-import type { FrameAnalysisResponse } from "../../types/frame";
+import type {
+  FrameAnalysisResponse,
+} from "../../types/frame";
 
 export const framesApi = {
   async upload(
     sessionId: number,
     imageUri: string,
     token: string,
-    question?: string,
     audioUri?: string
-
   ): Promise<FrameAnalysisResponse> {
     const formData = new FormData();
 
-    // Create a real File from the camera's local URI.
     const imageFile = new File(imageUri);
 
     if (!imageFile.exists) {
-      throw new Error("Captured image file was not found.");
+      throw new Error(
+        "Captured image file was not found."
+      );
     }
 
     formData.append(
@@ -28,20 +28,29 @@ export const framesApi = {
       imageFile,
       `frame_${Date.now()}.jpg`
     );
-    if (question?.trim()) {
-      formData.append("Question", question.trim());
-    }
+
+    // Used to identify the intended session.
+    // We will validate this in the backend in Stage 8.
+    formData.append("SessionId", String(sessionId));
+
     if (audioUri) {
       const audioFile = new File(audioUri);
-        
+
+      if (!audioFile.exists) {
+        throw new Error(
+          "Recorded WAV file was not found."
+        );
+      }
+      
       formData.append(
-        "Audio",
+        "Question",
         audioFile,
         `question_${Date.now()}.wav`
       );
     }
+
     return apiRequest<FrameAnalysisResponse>(
-      `/api/analyse/frame`,
+      "/api/analyse/frame",
       {
         method: "POST",
         body: formData,
@@ -51,41 +60,3 @@ export const framesApi = {
     );
   },
 };
-
-/*import { apiRequest } from "./client";
-import type { FrameAnalysisResponse } from "../../types/frame";
-
-export const framesApi = {
-  async upload(
-    sessionId: number,
-    imageUri: string,
-    token: string,
-    question?: string
-  ): Promise<FrameAnalysisResponse> {
-
-    // Multipart/form-data supports uploading files.
-    const formData = new FormData();
-
-    // React Native file representation.
-    formData.append("Image", {
-      uri: imageUri,
-      name: `frame_${Date.now()}.jpg`,
-      type: "image/jpeg",
-    } as unknown as Blob);
-
-    // Include a question only when provided.
-    if (question?.trim()) {
-      formData.append("Question", question.trim());
-    }
-
-    return apiRequest<FrameAnalysisResponse>(
-      `/api/analyse/frame`,
-      {
-        method: "POST",
-        body: formData,
-      },
-      token,
-      300000
-    );
-  },
-};*/

@@ -10,10 +10,14 @@ import {
 import { authApi } from "../services/api/auth";
 import { tokenStorage } from "../services/storage/token";
 
+import { usersApi } from "../services/api/users";
+import { ApiError } from "../services/api/client";
+
 import type {
   User,
   AuthResponse,
   RegisterRequest,
+   PreferredLanguage,
 } from "../types/auth";
 
 interface AuthContextType {
@@ -24,6 +28,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
+  updatePreferredLanguage: (
+    language: PreferredLanguage
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(
@@ -57,8 +64,35 @@ export function AuthProvider({
             Number.isFinite(expiresAt) &&
             expiresAt > Date.now()
           ) {
+
+            let restored = saved;
+
+            try {
+              const profile = await usersApi.getProfile(
+                saved.token,
+                saved.userId
+              );
+            
+              restored = {
+                ...saved,
+                name: profile.name,
+                email: profile.email,
+                preferredLanguage: profile.preferredLanguage,
+              };
+            } catch (err) {
+              if (
+                err instanceof ApiError &&
+                (err.status === 401 || err.status === 403)
+              ) {
+                await tokenStorage.remove();
+                return;
+              }
+            
+              console.warn("Could not refresh the saved profile.");
+            }
+
             if (mounted) {
-              setSession(saved);
+              setSession(restored);
             }
           } else {
             await tokenStorage.remove();
@@ -90,7 +124,21 @@ export function AuthProvider({
     ) {
       throw new Error("Invalid authentication response.");
     }
-
+    //fallback to make sure i am using the lATEST LANGUAGAGE UPDATE
+    if (
+       response.preferredLanguage !== "en" &&
+       response.preferredLanguage !== "fr"
+    )  {
+       const profile = await usersApi.getProfile(
+         response.token,
+         response.userId
+       );
+      
+       response = {
+         ...response,
+         preferredLanguage: profile.preferredLanguage,
+       };
+    } 
     await tokenStorage.save(response);
     setSession(response);
   }
@@ -124,18 +172,45 @@ export function AuthProvider({
         userId: session.userId,
         name: session.name,
         email: session.email,
+        preferredLanguage:
+         session.preferredLanguage === "fr" ? "fr" : "en",
       }
     : null;
 
+  // 7 ; updatePreferred language:
+    async function updatePreferredLanguage(
+      language: PreferredLanguage
+    ) {
+      if (!session) {
+        throw new Error("You must be logged in.");
+      }
+    
+      const response =
+        await usersApi.updatePreferredLanguage(
+          session.token,
+          language
+        );
+      
+      const updatedSession: AuthResponse = {
+        ...session,
+        preferredLanguage: response.preferredLanguage,
+      };
+    
+      await tokenStorage.save(updatedSession);
+    
+      setSession(updatedSession);
+    }
   return (
     <AuthContext.Provider
       value={{
         user,
         token: session?.token ?? null,
         loading,
+        
         login,
         register,
         logout,
+        updatePreferredLanguage,
       }}
     >
       {children}

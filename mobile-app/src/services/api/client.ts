@@ -69,22 +69,22 @@ export async function apiRequest<T>(
 
     text = await response.text();
   }catch (error) {
-  if (__DEV__) {
-  console.log(
-    "API request failed:",
-    endpoint,
-    error instanceof Error ? error.message : String(error)
-  );
-}
-
-  if (controller.signal.aborted) {
-    throw new Error("Request timed out.");
+    if (__DEV__) {
+    console.log(
+      "API request failed:",
+      endpoint,
+      error instanceof Error ? error.message : String(error)
+    );
   }
 
-  throw new Error("Cannot connect to VisionAid API.");
-}finally {
-    clearTimeout(timeoutId);
-  }
+    if (controller.signal.aborted) {
+      throw new Error("Request timed out.");
+    }
+  
+    throw new Error("Cannot connect to VisionAid API.");
+  }finally {
+      clearTimeout(timeoutId);
+    }
 
 
   let data: any = null;

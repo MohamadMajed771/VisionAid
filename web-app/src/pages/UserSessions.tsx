@@ -63,8 +63,11 @@ export default function UserSessions() {
   }
 
   return (
-    <section>
-      <Link to="/users">Back to connected users</Link>
+    <section className="monitor-page">
+        
+     <Link className="monitor-back" to="/users">
+      ← Back to connected users
+    </Link>
 
       <h1>User Sessions</h1>
 
@@ -80,10 +83,18 @@ export default function UserSessions() {
           )}
 
           {sessions.map((session) => (
-            <article key={session.sessionId}>
+            <article key={session.sessionId}  className="monitor-card">   
               <h3>Session #{session.sessionId}</h3>
 
-              <p>Status: {session.status}</p>
+              <p>
+                <span
+                  className={`monitor-status ${
+                    session.status.toLowerCase()
+                  }`}
+                >
+                  {session.status}
+                </span>
+             </p>
 
               <p>
                 Started: {formatBeirutDate(session.startedAt)}
@@ -93,7 +104,7 @@ export default function UserSessions() {
                 Ended: {formatBeirutDate(session.endedAt)}
               </p>
 
-              <Link
+              <Link  className="monitor-link"
                 to={`/users/${selectedUserId}/sessions/${session.sessionId}`}
               >
                 View frame history

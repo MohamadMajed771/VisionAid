@@ -42,7 +42,7 @@ export default function ConnectedUsers() {
   if (error) return <p role="alert" className="error">{error}</p>;
 
   return (
-    <div>
+    <div className="monitor-page">
       <h1>Connected Users</h1>
 
       {users.length === 0 ? (
@@ -51,11 +51,12 @@ export default function ConnectedUsers() {
         </p>
       ) : (
         users.map((user) => (
-          <section key={user.userId} className="panel">
+          <section key={user.userId} className="panel monitor-card" >
             <h2>{user.name}</h2>
             <p>{user.email}</p>
            
-           <Link to={`/users/${user.userId}/sessions`}>
+           <Link   className="monitor-link"
+            to={`/users/${user.userId}/sessions`}>
             View sessions
           </Link>
           </section>

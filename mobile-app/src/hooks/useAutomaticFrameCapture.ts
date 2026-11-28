@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 
+import type {
+  FrameAnalysisResponse,
+} from "../types/frame";
+
 import { framesApi } from "../services/api/frames";
 
 interface Options {
@@ -25,8 +29,8 @@ export function useAutomaticFrameCapture({
 }: Options) {
   const [frameCount, setFrameCount] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const [lastAnswer, setLastAnswer] =
-    useState<string | null>(null);
+  const [lastResponse, setLastResponse] =
+  useState<FrameAnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
@@ -102,7 +106,7 @@ export function useAutomaticFrameCapture({
 
           if (!cancelled && !pausedRef.current) {
             setFrameCount(count => count + 1);
-            setLastAnswer(result.answer);
+            setLastResponse(result);
             setError(null);
           }
         } catch (err) {
@@ -118,9 +122,7 @@ export function useAutomaticFrameCapture({
             pausedRef.current = true;
           }
         } finally {
-          if (!cancelled) {
-            setUploading(false);
-          }
+          setUploading(false);
         }
       })();
 
@@ -156,7 +158,8 @@ export function useAutomaticFrameCapture({
   return {
     frameCount,
     uploading,
-    lastAnswer,
+    lastAnswer: lastResponse?.answer ?? null,
+    lastResponse,
     error,
     pause,
     retry,

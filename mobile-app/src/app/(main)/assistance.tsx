@@ -1,15 +1,11 @@
-import * as Speech from "expo-speech";
+import { useCallback, useEffect, useRef, useState } from "react";
 import WavQuestionRecorder from "../../components/assistance/WavQuestionRecorder";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { framesApi } from "../../services/api/frames";
+import { speakAnswer, stopSpeaking } from "../../services/audio/tts";
 
 import {
-  AppState,
   ActivityIndicator,
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,49 +22,83 @@ import { useAssistanceSession } from "../../hooks/useAssistanceSession";
 import { useAutomaticFrameCapture } from "../../hooks/useAutomaticFrameCapture";
 
 export default function AssistanceScreen() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
+
+  const preferredLanguage = user?.preferredLanguage ?? "en";
 
   const cameraRef = useRef<CameraView>(null);
 
   const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] =
-    useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [focused, setFocused] = useState(false);
- // focused make sure the assistance screen is active as the navigation screen
+  // focused make sure the assistance screen is active as the navigation screen
   const [appActive, setAppActive] = useState(
-    AppState.currentState === "active"
+    AppState.currentState === "active",
   );
   // make sure we are opening the applicationto capture images (and not another app while our in background)
   const [stopping, setStopping] = useState(false);
   const lastSpokenAnswerRef = useRef<string | null>(null);
-  const [recordedAudioUri, setRecordedAudioUri] =
-  useState<string | null>(null);
+
+  const [questionActive, setQuestionActive] = useState(false);
+
+  const [questionSending, setQuestionSending] = useState(false);
+
+  const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
+
+  const questionActiveRef = useRef(false);
+  const questionSendingRef = useRef(false);
+
+  const focusedRef = useRef(false);
+  const visibleRef = useRef(false);
+  const visibilityVersion = useRef(0);
+
+  const lastAutomaticFrameRef = useRef<number | null>(null);
   // Track when the Assistance screen is visible.
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
+      visibleRef.current = AppState.currentState === "active";
+
       setFocused(true);
 
       return () => {
+        focusedRef.current = false;
+        visibleRef.current = false;
+        visibilityVersion.current++;
+
+        questionActiveRef.current = false;
+        setQuestionActive(false);
+
         setFocused(false);
         setCameraReady(false);
+
+        void stopSpeaking();
       };
-    }, [])
+    }, []),
   );
 
   // Pause the camera when the app enters background.
   useEffect(() => {
-    const subscription = AppState.addEventListener(
-      "change",
-      state => {
-        const active = state === "active";
-        setAppActive(active);
+    const subscription = AppState.addEventListener("change", (state) => {
+      console.log("[Assistance] AppState:", state);
+      const active = state === "active";
 
-        if (!active) {
-          setCameraReady(false);
-        }
+      setAppActive(active);
+
+      visibleRef.current = active && focusedRef.current;
+
+      if (!active) {
+        visibilityVersion.current++;
+
+        questionActiveRef.current = false;
+        setQuestionActive(false);
+
+        setCameraReady(false);
+
+        void stopSpeaking();
       }
-    );
+    });
 
     return () => subscription.remove();
   }, []);
@@ -82,19 +112,16 @@ export default function AssistanceScreen() {
   } = useAssistanceSession(token);
 
   const cameraVisible = focused && appActive;
-   // to make sure i am opening assistance.tsx and the app at the same time 
+  // to make sure i am opening assistance.tsx and the app at the same time
   const handleCameraReady = useCallback(() => {
     setCameraError(null);
     setCameraReady(true);
   }, []);
 
-  const handleCameraError = useCallback(
-    (message: string) => {
-      setCameraReady(false);
-      setCameraError(message);
-    },
-    []
-  );
+  const handleCameraError = useCallback((message: string) => {
+    setCameraReady(false);
+    setCameraError(message);
+  }, []);
 
   // Take one photo and return its local URI.
   const captureFrame = useCallback(async (): Promise<string> => {
@@ -106,7 +133,7 @@ export default function AssistanceScreen() {
       quality: 0.5,
       base64: false, // to take the uri and not transform it to string
       skipProcessing: false,
-      shutterSound: false,//to make sound of camera picture gone
+      shutterSound: false, //to make sound of camera picture gone
     });
 
     if (!photo?.uri) {
@@ -119,7 +146,7 @@ export default function AssistanceScreen() {
   const {
     frameCount,
     uploading,
-    lastAnswer,
+    lastResponse,
     error: frameError,
     pause,
     retry,
@@ -132,65 +159,177 @@ export default function AssistanceScreen() {
       cameraReady &&
       !!session &&
       !stopping &&
-      !ending,
+      !ending &&
+      !questionActive &&
+      !questionSending,
     captureFrame,
   });
 
+  useEffect(() => {
+    if (!focused || !appActive || stopping) {
+      void stopSpeaking();
+      return;
+    }
 
-        
-    useEffect(() => {
-      // Never speak after leaving Assistance
-      // or while the screen is stopping.
-      if (!focused || !appActive || stopping) {
-        void Speech.stop();
+    if (!lastResponse) return;
+
+    // Never handle the same automatic response twice.
+    if (lastAutomaticFrameRef.current === lastResponse.frameId) {
+      return;
+    }
+
+    lastAutomaticFrameRef.current = lastResponse.frameId;
+
+    if (
+      questionActive ||
+      questionActiveRef.current ||
+      questionSendingRef.current
+    ) {
+      return;
+    }
+
+    const answer = lastResponse.answer?.trim();
+
+    if (!answer) return;
+
+    setLatestAnswer(answer);
+
+    // Suppress repeated automatic descriptions.
+    if (lastSpokenAnswerRef.current === answer) {
+      return;
+    }
+
+    lastSpokenAnswerRef.current = answer;
+    console.log("[TTS]", {
+      preferredLanguage,
+      responseLanguage: lastResponse.language,
+      selectedLanguage: lastResponse.language ?? preferredLanguage,
+      answer,
+    });
+    void speakAnswer(answer, lastResponse.language ?? preferredLanguage).catch(
+      console.warn,
+    );
+  }, [
+    lastResponse,
+    preferredLanguage,
+    focused,
+    appActive,
+    stopping,
+    questionActive,
+  ]);
+
+  async function handleRecordingActivity(active: boolean) {
+    if (active) {
+      if (!visibleRef.current) {
+        throw new Error("Assistance is not active.");
+      }
+
+      // Immediately stop scheduling automatic frames.
+      pause();
+
+      questionActiveRef.current = true;
+      setQuestionActive(true);
+
+      // Prevent TTS from being recorded by the microphone.
+      await stopSpeaking();
+
+      if (!visibleRef.current) {
+        throw new Error("Assistance is no longer active.");
+      }
+    } else {
+      questionActiveRef.current = false;
+      setQuestionActive(false);
+    }
+  }
+
+  async function submitQuestion(audioUri: string) {
+    if (!session || !token || !cameraReady || !visibleRef.current || stopping) {
+      throw new Error("Assistance is not ready to send a question.");
+    }
+
+    if (questionSendingRef.current) return;
+
+    const version = visibilityVersion.current;
+    const sessionId = session.sessionId;
+
+    questionSendingRef.current = true;
+    setQuestionSending(true);
+
+    try {
+      pause();
+
+      // Finish any previous automatic capture/upload.
+      await waitForCurrentUpload();
+
+      if (!visibleRef.current || version !== visibilityVersion.current) {
         return;
       }
-  
-      const answer = lastAnswer?.trim();
-  
-      if (!answer) return;
-  
-      // Avoid speaking the same automatic answer
-      // repeatedly for consecutive frames.
-      if (lastSpokenAnswerRef.current === answer) {
+
+      // Take a fresh image when the question is ready.
+      const imageUri = await captureFrame();
+
+      if (!visibleRef.current || version !== visibilityVersion.current) {
         return;
       }
-  
-      lastSpokenAnswerRef.current = answer;
-  
-      let cancelled = false;
-  
-      void Speech.stop()
-        .then(() => {
-          if (cancelled) return;
-        
-          Speech.speak(answer, {
-            language: "en-US",
-            rate: 0.95,
-          });
-        })
-        .catch((error) => {
-          if (__DEV__) {
-            console.log("TTS error:", error);
-          }
-        });
-    
-      return () => {
-        cancelled = true;
-        void Speech.stop();
-      };
-    }, [lastAnswer, focused, appActive, stopping]);
 
+      // Send the image and WAV in the same request.
+      const result = await framesApi.upload(
+        sessionId,
+        imageUri,
+        token,
+        audioUri,
+      );
+
+      if (!visibleRef.current || version !== visibilityVersion.current) {
+        return;
+      }
+
+      if (result.sessionId !== sessionId) {
+        throw new Error("The response belongs to a different session.");
+      }
+
+      setLatestAnswer(result.answer);
+
+      const answer = result.answer?.trim();
+
+      if (answer) {
+        console.log("[Question] Speaking answer");
+
+        const completed = await speakAnswer(
+          answer,
+          result.language ?? preferredLanguage,
+        );
+
+        if (
+          completed &&
+          visibleRef.current &&
+          version === visibilityVersion.current
+        ) {
+          lastSpokenAnswerRef.current = answer;
+
+          console.log("[Question] Answer finished");
+        }
+      }
+    } finally {
+      questionSendingRef.current = false;
+      setQuestionSending(false);
+    }
+  }
 
   async function handleStop() {
-    if (stopping || !session) {
+    if (
+      stopping ||
+      !session ||
+      questionActiveRef.current ||
+      questionSendingRef.current
+    ) {
       return;
     }
 
     // Stop scheduling new frames immediately.
     pause();
     setStopping(true);
-
+    await stopSpeaking();
     // Let a currently running analysis finish.
     await waitForCurrentUpload();
 
@@ -204,21 +343,9 @@ export default function AssistanceScreen() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-    >
-      <Text style={styles.title}>
-        VisionAid Assistance
-      </Text>
-       <Pressable
-            style={styles.stopButton}
-            onPress={() => Speech.speak("VisionAid voice test")}
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>VisionAid Assistance</Text>
 
-            accessibilityRole="button"
-            accessibilityLabel="Speak Aloud"
-          >
-            <Text>Test speak aloud</Text>
-          </Pressable>
       {loading && (
         <View style={styles.center}>
           <ActivityIndicator size="large" />
@@ -245,44 +372,43 @@ export default function AssistanceScreen() {
               </View>
             )}
           </View>
-          <WavQuestionRecorder
-              onRecorded={(uri) => {
-                setRecordedAudioUri(uri);
-                console.log("WAV recording completed.");
-              }}
+          {cameraVisible && (
+            <WavQuestionRecorder
+              disabled={!cameraReady || stopping || ending || questionSending}
+              onActivityChange={handleRecordingActivity}
+              onRecorded={submitQuestion}
             />
+          )}
 
-            {recordedAudioUri && (
-              <Text>Question recorded successfully.</Text>
-            )}
+          {questionSending && (
+            <Text style={styles.info}>Analyzing your question...</Text>
+          )}
+
           <Text style={styles.info}>
             {stopping
               ? "Finishing the current analysis..."
-              : uploading
-                ? "Analyzing camera frame..."
-                : cameraReady && cameraVisible
-                  ? "Automatic analysis is ready"
-                  : "Waiting for camera"}
+              : questionSending
+                ? "Analyzing your question..."
+                : questionActive
+                  ? "Automatic analysis paused for question"
+                  : uploading
+                    ? "Analyzing camera frame..."
+                    : cameraReady && cameraVisible
+                      ? "Automatic analysis is ready"
+                      : "Waiting for camera"}
           </Text>
 
-          <Text style={styles.info}>
-            Frames analyzed: {frameCount}
-          </Text>
+          <Text style={styles.info}>Frames analyzed: {frameCount}</Text>
 
-          {lastAnswer && (
+          {latestAnswer && (
             <View style={styles.answerContainer}>
-              <Text style={styles.answerTitle}>
-                Latest AI Answer
-              </Text>
-              <Text style={styles.answer}>
-                {lastAnswer}
-              </Text>
+              <Text style={styles.answerTitle}>Latest AI Answer</Text>
+
+              <Text style={styles.answer}>{latestAnswer}</Text>
             </View>
           )}
 
-          {cameraError && (
-            <Text style={styles.error}>{cameraError}</Text>
-          )}
+          {cameraError && <Text style={styles.error}>{cameraError}</Text>}
 
           {frameError && (
             <View style={styles.center}>
@@ -293,9 +419,7 @@ export default function AssistanceScreen() {
                 onPress={retry}
                 accessibilityRole="button"
               >
-                <Text style={styles.buttonText}>
-                  Retry Analysis
-                </Text>
+                <Text style={styles.buttonText}>Retry Analysis</Text>
               </Pressable>
             </View>
           )}
@@ -303,24 +427,18 @@ export default function AssistanceScreen() {
           <Pressable
             style={styles.stopButton}
             onPress={() => void handleStop()}
-            disabled={stopping || ending}
+            disabled={stopping || ending || questionActive || questionSending}
             accessibilityRole="button"
             accessibilityLabel="End assistance session"
           >
             <Text style={styles.buttonText}>
-              {stopping || ending
-                ? "Ending..."
-                : "End Session"}
+              {stopping || ending ? "Ending..." : "End Session"}
             </Text>
           </Pressable>
         </>
       )}
 
-      {sessionError && (
-        <Text style={styles.error}>
-          {sessionError}
-        </Text>
-      )}
+      {sessionError && <Text style={styles.error}>{sessionError}</Text>}
 
       {!loading && !session && (
         <Pressable
@@ -328,9 +446,7 @@ export default function AssistanceScreen() {
           onPress={() => router.replace("/home")}
           accessibilityRole="button"
         >
-          <Text style={styles.buttonText}>
-            Back to Home
-          </Text>
+          <Text style={styles.buttonText}>Back to Home</Text>
         </Pressable>
       )}
     </ScrollView>

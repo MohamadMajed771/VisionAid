@@ -71,6 +71,50 @@ export const adminApi = {
       {},
       token
     );
-  }
+  },
 
+
+  
+  
+    async getFrameImage(
+    token: string,
+    userId: number,
+    sessionId: number,
+    frameId: number,
+    analyzed: boolean = false,
+    signal?: AbortSignal
+  ): Promise<Blob> {
+  
+    const base =
+      `/api/admins/users/${userId}` +
+      `/sessions/${sessionId}` +
+      `/frames/${frameId}`;
+  
+    const url = analyzed
+      ? `${base}/analyzed-image`
+      : `${base}/image`;
+  
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+      signal,
+    });
+  
+    if (!response.ok) {
+      throw new Error(
+        `Image unavailable (${response.status})`
+      );
+    }
+  
+    const blob = await response.blob();
+  
+    if (!blob.type.startsWith("image/")) {
+      throw new Error("Invalid image response.");
+    }
+  
+    return blob;
+  },
+  
 };

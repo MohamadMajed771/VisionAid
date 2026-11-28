@@ -4,4 +4,5 @@ export interface FrameAnalysisResponse {
   sessionId: number;
   answer: string | null;
   capturedAt: string;
+  language?: string;
 }

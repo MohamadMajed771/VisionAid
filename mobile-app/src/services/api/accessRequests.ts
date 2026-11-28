@@ -14,7 +14,20 @@ export interface AccessRequest {
   respondedAt: string | null;
 }
 
+export interface AcceptedMonitor {
+  adminId: number;
+  name: string;
+  email: string;
+}
 export const accessRequestsApi = {
+
+  getAcceptedMonitors(token: string) {
+    return apiRequest<AcceptedMonitor[]>(
+      "/api/users/access-requests/admins",
+      {},
+      token
+    );
+  },
   getPending(token: string) {
     return apiRequest<AccessRequest[]>(
       "/api/users/access-requests",

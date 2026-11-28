@@ -1,8 +1,11 @@
 
+export type PreferredLanguage = "en" | "fr";
+
 export interface User {
   userId: number;
   name: string;
   email: string;
+  preferredLanguage: PreferredLanguage;
 }
 
 export interface LoginRequest {
@@ -14,7 +17,7 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
-  preferredLanguage: string;
+  preferredLanguage: PreferredLanguage;
 }
 
 // Returned by BOTH register and login.
